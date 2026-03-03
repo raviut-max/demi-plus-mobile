@@ -1,0 +1,117 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #EFF6FF;
+  --foreground: #1E3A5F;
+  --card: #FFFFFF;
+  --card-foreground: #1E3A5F;
+  --popover: #FFFFFF;
+  --popover-foreground: #1E3A5F;
+  --primary: #22C55E;
+  --primary-foreground: #FFFFFF;
+  --secondary: #3B82F6;
+  --secondary-foreground: #FFFFFF;
+  --muted: #E0ECFF;
+  --muted-foreground: #5B7BA5;
+  --accent: #DBEAFE;
+  --accent-foreground: #1E3A5F;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --border: #C7DEFF;
+  --input: #E0ECFF;
+  --ring: #3B82F6;
+  --radius: 0.75rem;
+
+  --color-demi-green: #22C55E;
+  --color-demi-green-dark: #16A34A;
+  --color-demi-blue: #3B82F6;
+  --color-demi-blue-dark: #1E3A5F;
+  --color-demi-sky: #EFF6FF;
+  --color-demi-lavender: #E8E0F0;
+}
+
+@theme inline {
+  --font-sans: var(--font-prompt), 'Prompt', sans-serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --color-demi-green: #22C55E;
+  --color-demi-green-dark: #16A34A;
+  --color-demi-blue: #3B82F6;
+  --color-demi-blue-dark: #1E3A5F;
+  --color-demi-sky: #EFF6FF;
+  --color-demi-lavender: #E8E0F0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom scrollbar hiding for mobile feel */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Sparkle animation for background */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.animate-twinkle {
+  animation: twinkle 3s ease-in-out infinite;
+}
+
+/* Green gradient button */
+.btn-green-gradient {
+  background: linear-gradient(180deg, #4ADE80 0%, #16A34A 100%);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+}
+
+/* Blue sky background with stars pattern */
+.bg-sky-pattern {
+  background: linear-gradient(180deg, #DBEAFE 0%, #EFF6FF 30%, #F0F4FF 100%);
+  position: relative;
+}
+
+/* Soft card style matching mockup */
+.card-soft {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(199, 222, 255, 0.5);
+  border-radius: 1rem;
+}
