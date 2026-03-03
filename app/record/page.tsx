@@ -59,6 +59,7 @@ export default function RecordPage() {
           getTodayRecords(userData.id)
         ]);
         setProfile(profileData);
+        
         const activitiesWithRecords = activitiesData.map((activity: any) => {
           const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
           return {
@@ -77,6 +78,7 @@ export default function RecordPage() {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [router]);
 
@@ -229,7 +231,7 @@ export default function RecordPage() {
               onToggle={toggleActivity}
               onOpenSweetForm={handleOpenSweetForm}
               headerBg="bg-[#ECFDF5]"
-              iconMap={{ stop_sweet: '🚫🍬', reduce_rice: '🍚', protein_vegetable: '🥦🍖' }}
+              iconMap={{ stop_sweet: '🚫🍬', reduce_rice: '🍚', protein_vegetable: '🥦🍖', carb_control: '🍚', protein_intake: '🥩', water_intake: '💧' }}
               showSweetType={true}
             />
           </div>

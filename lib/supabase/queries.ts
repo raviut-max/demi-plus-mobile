@@ -5,8 +5,6 @@ import { supabase } from './client';
 // =====================================================
 export async function login(idCard: string, password: string) {
   try {
-    console.log('Login attempt:', { idCard, passwordLength: password.length });
-
     const { data, error } = await supabase
       .from('users')
       .select('id, id_card, password_hash, role, is_active')
@@ -15,14 +13,11 @@ export async function login(idCard: string, password: string) {
       .eq('is_active', true)
       .single();
 
-    console.log('Query result:', { data, error });
-
     if (error || !data) {
-      console.error('Login failed:', error);
       return null;
     }
 
-    const {  profile } = await supabase
+    const { data: profile } = await supabase
       .from('profiles')
       .select('full_name, pam_level, current_step, hospital_number')
       .eq('id', data.id)
@@ -102,10 +97,14 @@ export async function getActivities(pamLevel: string) {
     .select('*')
     .or(`pam_level.eq.${pamLevel},pam_level.eq.ALL`)
     .eq('is_active', true)
-    .order('sort_order');
+    .order('sort_order', { ascending: true });
 
-  if (error) return [];
-  return data;
+  if (error) {
+    console.error('Error fetching activities:', error);
+    return [];
+  }
+
+  return data || [];
 }
 
 // =====================================================
@@ -119,28 +118,6 @@ export async function saveRecord(data: {
   [key: string]: any;
 }) {
   try {
-    console.log('Saving record:', {
-      user_id: data.user_id,
-      activity_id: data.activity_id,
-      record_date: data.record_date,
-      is_completed: data.is_completed,
-      sweet_type: data.sweet_type,
-      weight: data.weight,
-      blood_sugar: data.blood_sugar,
-    });
-
-    // ตรวจสอบว่า activity_id มีจริง
-    const { data: activityCheck } = await supabase
-      .from('activities')
-      .select('id')
-      .eq('id', data.activity_id)
-      .single();
-
-    if (!activityCheck) {
-      console.error('Activity not found:', data.activity_id);
-      return null;
-    }
-
     const { data: result, error } = await supabase
       .from('records')
       .upsert({
@@ -149,36 +126,19 @@ export async function saveRecord(data: {
         record_date: data.record_date,
         is_completed: data.is_completed,
         updated_at: new Date().toISOString(),
-        ...(data.walking_minutes !== undefined && { walking_minutes: data.walking_minutes }),
-        ...(data.weight !== undefined && { weight: parseFloat(data.weight.toString()) }),
-        ...(data.blood_sugar !== undefined && { blood_sugar: parseFloat(data.blood_sugar.toString()) }),
-        ...(data.sleep_hours !== undefined && { sleep_hours: data.sleep_hours }),
-        ...(data.carb_count !== undefined && { carb_count: data.carb_count }),
-        ...(data.protein_units !== undefined && { protein_units: data.protein_units }),
-        ...(data.water_liters !== undefined && { water_liters: data.water_liters }),
-        ...(data.stretching_minutes !== undefined && { stretching_minutes: data.stretching_minutes }),
-        ...(data.cardio_minutes !== undefined && { cardio_minutes: data.cardio_minutes }),
-        ...(data.strengthening_minutes !== undefined && { strengthening_minutes: data.strengthening_minutes }),
-        ...(data.hiit_minutes !== undefined && { hiit_minutes: data.hiit_minutes }),
+        ...(data.weight !== undefined && { weight: data.weight }),
+        ...(data.blood_sugar !== undefined && { blood_sugar: data.blood_sugar }),
         ...(data.sweet_type !== undefined && { sweet_type: data.sweet_type }),
-        ...(data.rice_before !== undefined && { rice_before: data.rice_before }),
-        ...(data.rice_current !== undefined && { rice_current: data.rice_current }),
       }, {
         onConflict: 'user_id,activity_id,record_date',
       })
       .select();
 
     if (error) {
-      console.error('Upsert error details:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-      });
+      console.error('Upsert error:', error);
       return null;
     }
 
-    console.log('Record saved successfully:', result);
     return result;
   } catch (err) {
     console.error('Save record error:', err);
@@ -212,6 +172,30 @@ export async function getTodayRecords(userId: string) {
 }
 
 // =====================================================
+// ฟังก์ชันดึงเป้าหมายรายสัปดาห์
+// =====================================================
+export async function getWeeklyGoals(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .eq('goal_type', 'weekly_activity');
+
+    if (error) {
+      console.error('Error fetching weekly goals:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Get weekly goals error:', err);
+    return [];
+  }
+}
+
+// =====================================================
 // ฟังก์ชันดึง Progress 7 วัน
 // =====================================================
 export async function getProgress(userId: string, days: number = 7) {
@@ -237,18 +221,27 @@ export async function getProgress(userId: string, days: number = 7) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงเป้าหมาย
+// ฟังก์ชันดึงเป้าหมาย (รวมทั้งหมด)
 // =====================================================
 export async function getGoals(userId: string) {
-  const { data, error } = await supabase
-    .from('goals')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('status', 'active')
-    .order('priority');
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('priority', { ascending: true });
 
-  if (error) return [];
-  return data;
+    if (error) {
+      console.error('Error fetching goals:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Get goals error:', err);
+    return [];
+  }
 }
 
 // =====================================================
@@ -256,6 +249,9 @@ export async function getGoals(userId: string) {
 // =====================================================
 export async function getNextAppointment(userId: string) {
   try {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -267,10 +263,11 @@ export async function getNextAppointment(userId: string) {
         )
       `)
       .eq('user_id', userId)
-      .in('status', ['scheduled', 'confirmed'])
-      .gte('appointment_date', new Date().toISOString())
+      .in('status', ['scheduled', 'confirmed', 'pending'])
+      .gte('appointment_date', startOfToday.toISOString())
       .order('appointment_date', { ascending: true })
-      .single();
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       console.error('Error fetching appointment:', error);
@@ -285,23 +282,115 @@ export async function getNextAppointment(userId: string) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงสถิติรายสัปดาห์
+// ฟังก์ชันดึงสถิติสุขภาพล่าสุด
 // =====================================================
-export async function getWeeklyStats(userId: string) {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 7);
+export async function getHealthStats(userId: string) {
+  try {
+    // ดึงน้ำหนักและน้ำตาลล่าสุดจาก records
+    const { data: records, error } = await supabase
+      .from('records')
+      .select('weight, blood_sugar, record_date')
+      .eq('user_id', userId)
+      .order('record_date', { ascending: false })
+      .limit(10);
 
-  const { data, error } = await supabase
-    .from('records')
-    .select('is_completed, record_date')
-    .eq('user_id', userId)
-    .gte('record_date', startDate.toISOString());
+    if (error) {
+      console.error('Error fetching health stats:', error);
+      return null;
+    }
 
-  if (error) return { completed: 0, total: 0, percentage: 0 };
+    // ค่าน้ำหนักล่าสุด
+    const latestWeight = records?.find(r => r.weight)?.weight || null;
+    
+    // ค่าน้ำตาลล่าสุด
+    const latestBloodSugar = records?.find(r => r.blood_sugar)?.blood_sugar || null;
 
-  const completed = data.filter(r => r.is_completed).length;
-  const total = data.length;
-  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      latestWeight,
+      latestBloodSugar,
+    };
+  } catch (err) {
+    console.error('Get health stats error:', err);
+    return null;
+  }
+}
 
-  return { completed, total, percentage };
+// =====================================================
+// ฟังก์ชันดึงข้อมูลโค้ช
+// =====================================================
+export async function getCoach(userId: string) {
+  try {
+    // ดึงนัดหมายล่าสุดเพื่อหาโค้ช
+    const { data: appointment, error } = await supabase
+      .from('appointments')
+      .select(`
+        doctors (
+          full_name_th
+        )
+      `)
+      .eq('user_id', userId)
+      .order('appointment_date', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !appointment?.doctors) {
+      return 'โค้ชสมชาย'; // Default
+    }
+
+    return appointment.doctors.full_name_th;
+  } catch (err) {
+    console.error('Get coach error:', err);
+    return 'โค้ชสมชาย';
+  }
+}
+
+// =====================================================
+// ฟังก์ชันดึงชื่อโค้ช
+// =====================================================
+export async function getCoachName(coachId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('full_name_th')
+      .eq('id', coachId)
+      .single();
+
+    if (error || !data) {
+      return 'โค้ชสุรชัย';
+    }
+
+    return data.full_name_th || 'โค้ชสุรชัย';
+  } catch (err) {
+    console.error('Get coach name error:', err);
+    return 'โค้ชสุรชัย';
+  }
+}
+
+// =====================================================
+// ฟังก์ชันดึงความรู้ (Knowledge)
+// =====================================================
+export async function getKnowledge(pamLevel: string = 'ALL') {
+  try {
+    console.log('📚 [getKnowledge] Fetching for pamLevel:', pamLevel);
+    
+    // ดึงข้อมูลสำหรับ Level นี้ + ข้อมูลกลาง (ALL)
+    const { data, error } = await supabase
+      .from('knowledge')
+      .select('*')
+      .or(`pam_level.eq.${pamLevel},pam_level.eq.ALL`)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ [getKnowledge] Error:', error);
+      return [];
+    }
+
+    console.log('✅ [getKnowledge] Fetched:', data?.length || 0, 'items');
+    return data || [];
+  } catch (err) {
+    console.error('❌ [getKnowledge] Error:', err);
+    return [];
+  }
 }

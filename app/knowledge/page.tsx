@@ -1,69 +1,223 @@
-import { Play, FileText, User, Dumbbell } from "lucide-react"
-import { knowledgeArticles } from "@/lib/mock-data"
-import { StarBackground } from "@/components/star-background"
-import Image from "next/image"
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { checkSession, getProfile, getKnowledge } from '@/lib/supabase/queries';
+import { StarBackground } from '@/components/star-background';
+import Image from 'next/image';
+import { Play, FileText, Globe, ExternalLink } from 'lucide-react';
+
+interface Knowledge {
+  id: string;
+  title: string;
+  description: string | null;
+  link_type: string;
+  link_url: string;
+  thumbnail_url: string | null;
+  category: string | null;
+  pam_level: string | null;
+  duration_minutes: number | null;
+  file_size: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
 
 export default function KnowledgePage() {
-  return (
-    <div className="relative">
-      <StarBackground />
-      <div className="relative z-10 px-4 pt-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-foreground">
-            ความรู้สำหรับนักกีฬา
-          </h1>
-          <div className="h-14 w-14 overflow-hidden rounded-full bg-[#DBEAFE]">
-            <div className="flex h-full w-full items-center justify-center">
-              <Dumbbell className="h-6 w-6 text-[#3B82F6]" />
-            </div>
-          </div>
-        </div>
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [knowledge, setKnowledge] = useState<Knowledge[]>([]);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-        {/* Articles */}
-        <div className="mt-4 flex flex-col gap-3 pb-6">
-          {knowledgeArticles.map((article, idx) => (
-            <div key={article.id} className="card-soft overflow-hidden">
-              <div className="flex items-start gap-3 p-4">
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-foreground">
-                    {article.title}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {article.description}
-                  </p>
-                  {(article.hasVideo || article.hasArticle) && (
-                    <div className="mt-3 flex gap-2">
-                      {article.hasVideo && (
-                        <button className="btn-green-gradient flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-[#FFFFFF]">
-                          <Play className="h-3 w-3" fill="currentColor" />
-                          ดูคลิป 3 นาที
-                        </button>
-                      )}
-                      {article.hasArticle && (
-                        <button className="flex items-center gap-1.5 rounded-full border border-[#22C55E] bg-card px-4 py-1.5 text-xs font-semibold text-[#22C55E]">
-                          <FileText className="h-3 w-3" />
-                          อ่านบทความ
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {/* Show mascot for certain articles */}
-                {idx < 2 && (
-                  <Image
-                    src="/images/mascot-main.png"
-                    alt="DeMi+ Mascot"
-                    width={60}
-                    height={70}
-                    className="h-auto w-14 shrink-0"
-                  />
-                )}
-              </div>
-            </div>
-          ))}
+useEffect(() => {
+  const userData = checkSession();
+  if (!userData) {
+    router.push('/login');
+    return;
+  }
+  setUser(userData);
+
+  const fetchData = async () => {
+    try {
+      console.log('📚 [KnowledgePage] User PAM Level:', userData.pam_level);
+      
+      const [profileData, knowledgeData] = await Promise.all([
+        getProfile(userData.id),
+        getKnowledge(userData.pam_level || 'L2')
+      ]);
+      
+      console.log('📚 [KnowledgePage] Profile:', profileData);
+      console.log('📚 [KnowledgePage] Knowledge count:', knowledgeData?.length);
+      console.log('📚 [KnowledgePage] Knowledge data:', knowledgeData);
+      
+      setProfile(profileData);
+      setKnowledge(knowledgeData);
+    } catch (error) {
+      console.error('❌ [KnowledgePage] Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [router]);
+
+  const getLinkIcon = (linkType: string) => {
+    switch (linkType) {
+      case 'video':
+        return <Play className="w-5 h-5" />;
+      case 'document':
+        return <FileText className="w-5 h-5" />;
+      case 'website':
+        return <Globe className="w-5 h-5" />;
+      default:
+        return <ExternalLink className="w-5 h-5" />;
+    }
+  };
+
+  const getLinkColor = (linkType: string) => {
+    switch (linkType) {
+      case 'video':
+        return 'bg-red-100 text-red-600';
+      case 'document':
+        return 'bg-blue-100 text-blue-600';
+      case 'website':
+        return 'bg-green-100 text-green-600';
+      default:
+        return 'bg-gray-100 text-gray-600';
+    }
+  };
+
+  const getDurationText = (item: Knowledge) => {
+    if (item.link_type === 'video' && item.duration_minutes) {
+      return `${item.duration_minutes} นาที`;
+    }
+    if (item.link_type === 'document' && item.file_size) {
+      return item.file_size;
+    }
+    return null;
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">กำลังโหลด...</p>
         </div>
       </div>
+    );
+  }
+
+  // จัดกลุ่มตาม category
+  const groupedKnowledge = knowledge.reduce((acc, item) => {
+    const category = item.category || 'general';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(item);
+    return acc;
+  }, {} as Record<string, Knowledge[]>);
+
+  const getCategoryName = (category: string) => {
+    const names: Record<string, string> = {
+      food: '🍚 อาหาร',
+      exercise: '🧘 ออกกำลังกาย',
+      health: '❤️ สุขภาพ',
+      general: '📚 ทั่วไป'
+    };
+    return names[category] || category;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
+      <StarBackground />
+      
+      <div className="max-w-md mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">ความรู้สำหรับนักกีฬา</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {profile?.pam_level === 'L4' ? 'L4 Champion' : profile?.pam_level || 'L2'}
+            </p>
+          </div>
+          <Image
+            src="/images/mascot-main.png"
+            alt="Mascot"
+            width={50}
+            height={60}
+            className="object-contain"
+          />
+        </div>
+
+        {/* Knowledge List */}
+        {Object.keys(groupedKnowledge).length > 0 ? (
+          <div className="space-y-6">
+            {Object.entries(groupedKnowledge).map(([category, items]) => (
+              <div key={category}>
+                <h2 className="text-lg font-bold text-gray-800 mb-3">
+                  {getCategoryName(category)}
+                </h2>
+                
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <a
+                      key={item.id}
+                      href={item.link_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block bg-white/80 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-white/50 hover:shadow-xl transition-all"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Icon */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getLinkColor(item.link_type)}`}>
+                          {getLinkIcon(item.link_type)}
+                        </div>
+                        
+                        {/* Content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-bold text-gray-800 truncate">
+                              {item.title}
+                            </h3>
+                            <ExternalLink className="w-3 h-3 text-gray-400" />
+                          </div>
+                          
+                          {item.description && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                              {item.description}
+                            </p>
+                          )}
+                          
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${getLinkColor(item.link_type)}`}>
+                              {item.link_type === 'video' && '🎬 วิดีโอ'}
+                              {item.link_type === 'document' && '📄 เอกสาร'}
+                              {item.link_type === 'website' && '🌐 เว็บไซต์'}
+                            </span>
+                            
+                            {getDurationText(item) && (
+                              <span className="text-xs text-gray-400">
+                                {getDurationText(item)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 shadow-lg border border-white/50 text-center">
+            <p className="text-gray-500">ยังไม่มีเนื้อหา</p>
+            <p className="text-xs text-gray-400 mt-1">โค้ชจะเพิ่มเนื้อหาให้เร็วๆ นี้</p>
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }
