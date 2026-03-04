@@ -20,7 +20,7 @@ import {
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [coachName, setCoachName] = useState<string>('โค้ชสุรชัย');
+  const [coachName, setCoachName] = useState('โค้ชสุรชัย');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -37,7 +37,6 @@ export default function ProfilePage() {
         const profileData = await getProfile(userData.id);
         setProfile(profileData);
         
-        // ดึงชื่อโค้ชจาก coach_id
         if (profileData?.coach_id) {
           setCoachName('โค้ชสุรชัย');
         } else {
@@ -59,41 +58,40 @@ export default function ProfilePage() {
   };
 
   // คำนวณอายุ (รองรับ พ.ศ. และ ค.ศ.)
-const calculateAge = (birthDate: string) => {
-  if (!birthDate) return '-';
-  
-  try {
-    const today = new Date();
-    let birth: Date;
+  const calculateAge = (birthDate: string) => {
+    if (!birthDate) return '-';
     
-    const birthYear = parseInt(birthDate.split('-')[0]);
-    
-    // ✅ ถ้าปีมากกว่า 2500 แสดงว่าเป็น พ.ศ. → แปลงเป็น ค.ศ.
-    if (birthYear > 2500) {
-      const thaiYear = birthYear - 543;
-      const thaiDate = birthDate.replace(`${birthYear}`, `${thaiYear}`);
-      birth = new Date(thaiDate);
-    } else {
-      birth = new Date(birthDate);
-    }
-    
-    if (isNaN(birth.getTime())) {
-      console.error('Invalid birth date:', birthDate);
+    try {
+      const today = new Date();
+      let birth: Date;
+      
+      const birthYear = parseInt(birthDate.split('-')[0]);
+      
+      if (birthYear > 2500) {
+        const thaiYear = birthYear - 543;
+        const thaiDate = birthDate.replace(`${birthYear}`, `${thaiYear}`);
+        birth = new Date(thaiDate);
+      } else {
+        birth = new Date(birthDate);
+      }
+      
+      if (isNaN(birth.getTime())) {
+        console.error('Invalid birth date:', birthDate);
+        return '-';
+      }
+      
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      
+      return age > 0 && age < 150 ? age : '-';
+    } catch (error) {
+      console.error('Error calculating age:', error);
       return '-';
     }
-    
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
-    }
-    
-    return age > 0 && age < 150 ? age : '-';
-  } catch (error) {
-    console.error('Error calculating age:', error);
-    return '-';
-  }
-};
+  };
 
   // แปลง gender เป็นภาษาไทย
   const getGenderThai = (gender: string) => {
@@ -133,6 +131,20 @@ const calculateAge = (birthDate: string) => {
     }
   };
 
+  // ✅ แสดงชื่อ Level ตาม PAM Level ที่ถูกต้อง
+  const getPAMLevelName = (pamLevel: string) => {
+    switch (pamLevel) {
+      case 'L4':
+        return { thai: 'กลุ่มแชมเปี้ยน', en: 'Champion', desc: 'PAM 80%+' };
+      case 'L3':
+        return { thai: 'กลุ่มรักสุขภาพ', en: 'Intensive', desc: 'PAM 41-79%' };
+      case 'L2':
+        return { thai: 'กลุ่มทั่วไป', en: 'General', desc: 'PAM 21-40%' };
+      default:
+        return { thai: 'ไม่พร้อม', en: 'Uncontrolled', desc: 'PAM 0-20%' };
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
@@ -144,7 +156,7 @@ const calculateAge = (birthDate: string) => {
     );
   }
 
-  // ข้อมูลจาก Database (ใช้ชื่อคอลัมน์ที่ถูกต้อง)
+  // ข้อมูลจาก Database
   const age = calculateAge(profile?.birth_date);
   const gender = getGenderThai(profile?.gender);
   const weight = profile?.current_weight || 75.5;
@@ -152,13 +164,14 @@ const calculateAge = (birthDate: string) => {
   const bmi = calculateBMI(weight, height);
   const waist = profile?.waist_circumference || 92;
   const diabetesDuration = calculateDiabetesDuration(profile?.birth_date);
+  const pamLevelName = getPAMLevelName(profile?.pam_level || 'L2');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 pb-20">
       <StarBackground />
       
       <div className="max-w-md mx-auto px-4 py-6">
-        {/* Header - Mascot มุมซ้าย + ชื่อผู้ป่วยตัวใหญ่ */}
+        {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Image
             src="/images/mascot-main.png"
@@ -271,7 +284,7 @@ const calculateAge = (birthDate: string) => {
           </div>
         </div>
 
-        {/* Assessment Results Card */}
+        {/* Assessment Results Card - ✅ แก้ไขใหม่ */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-yellow-200 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-yellow-400 to-orange-400 px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -282,6 +295,7 @@ const calculateAge = (birthDate: string) => {
           </div>
           
           <div className="p-4 space-y-3">
+            {/* PAM Level - ✅ แสดงตาม Level จริง */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                 <Trophy className="w-5 h-5 text-green-600" />
@@ -289,21 +303,28 @@ const calculateAge = (birthDate: string) => {
               <div className="flex-1">
                 <p className="text-sm text-gray-500">PAM</p>
                 <p className="text-base font-bold text-gray-800">
-                  ระดับ {profile?.pam_level || 'L2'} (Manager), คะแนน 18/20
+                  {pamLevelName.thai} ({pamLevelName.en})
+                </p>
+                <p className="text-xs text-gray-500">
+                  คะแนน {profile?.pam_score || 0}/20 ({pamLevelName.desc})
                 </p>
               </div>
             </div>
 
+            {/* PROMs Zone */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                 <Heart className="w-5 h-5 text-red-600" />
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-500">PROMs</p>
-                <p className="text-base font-bold text-green-600">{profile?.zone || 'Green Zone'}</p>
+                <p className="text-base font-bold text-green-600">
+                  {profile?.zone || 'Green Zone'}
+                </p>
               </div>
             </div>
 
+            {/* Confidence */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <Target className="w-5 h-5 text-blue-600" />
@@ -314,6 +335,7 @@ const calculateAge = (birthDate: string) => {
               </div>
             </div>
 
+            {/* Quote */}
             <div className="bg-green-50 rounded-xl p-3 text-center">
               <p className="text-sm text-green-700 font-semibold">"มั่นใจมาก! วันนี้ทำได้แน่นอน"</p>
             </div>

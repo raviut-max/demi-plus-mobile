@@ -19,7 +19,7 @@ export async function login(idCard: string, password: string) {
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('full_name, pam_level, current_step, hospital_number')
+      .select('full_name, pam_level, pam_score, current_step, hospital_number, zone')
       .eq('id', data.id)
       .single();
 
@@ -28,9 +28,10 @@ export async function login(idCard: string, password: string) {
       id_card: data.id_card,
       full_name_th: profile?.full_name || 'ผู้ใช้',
       pam_level: profile?.pam_level || 'L2',
+      pam_score: profile?.pam_score || 18,
       current_step: profile?.current_step || 'Starter',
       hospital_number: profile?.hospital_number || '',
-      zone: 'green',
+      zone: profile?.zone || 'Green Zone',
       role: data.role,
     };
   } catch (err) {
@@ -92,6 +93,8 @@ export async function getProfile(userId: string) {
 // ฟังก์ชันดึงกิจกรรมตาม PAM Level
 // =====================================================
 export async function getActivities(pamLevel: string) {
+  console.log('Fetching activities for pamLevel:', pamLevel);
+  
   const { data, error } = await supabase
     .from('activities')
     .select('*')
@@ -104,6 +107,7 @@ export async function getActivities(pamLevel: string) {
     return [];
   }
 
+  console.log('Activities fetched:', data?.length || 0);
   return data || [];
 }
 
@@ -204,14 +208,7 @@ export async function getProgress(userId: string, days: number = 7) {
 
   const { data, error } = await supabase
     .from('records')
-    .select(`
-      *,
-      activities (
-        activity_code,
-        activity_name_th,
-        activity_type
-      )
-    `)
+    .select(`*, activities ( activity_code, activity_name_th, activity_type )`)
     .eq('user_id', userId)
     .gte('record_date', startDate.toISOString())
     .order('record_date', { ascending: false });
@@ -221,10 +218,12 @@ export async function getProgress(userId: string, days: number = 7) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงเป้าหมาย (รวมทั้งหมด)
+// ฟังก์ชันดึงเป้าหมาย
 // =====================================================
 export async function getGoals(userId: string) {
   try {
+    console.log('Fetching goals for userId:', userId);
+    
     const { data, error } = await supabase
       .from('goals')
       .select('*')
@@ -237,6 +236,7 @@ export async function getGoals(userId: string) {
       return [];
     }
 
+    console.log('Goals fetched:', data?.length || 0);
     return data || [];
   } catch (err) {
     console.error('Get goals error:', err);
@@ -282,98 +282,12 @@ export async function getNextAppointment(userId: string) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงสถิติสุขภาพล่าสุด
-// =====================================================
-export async function getHealthStats(userId: string) {
-  try {
-    // ดึงน้ำหนักและน้ำตาลล่าสุดจาก records
-    const { data: records, error } = await supabase
-      .from('records')
-      .select('weight, blood_sugar, record_date')
-      .eq('user_id', userId)
-      .order('record_date', { ascending: false })
-      .limit(10);
-
-    if (error) {
-      console.error('Error fetching health stats:', error);
-      return null;
-    }
-
-    // ค่าน้ำหนักล่าสุด
-    const latestWeight = records?.find(r => r.weight)?.weight || null;
-    
-    // ค่าน้ำตาลล่าสุด
-    const latestBloodSugar = records?.find(r => r.blood_sugar)?.blood_sugar || null;
-
-    return {
-      latestWeight,
-      latestBloodSugar,
-    };
-  } catch (err) {
-    console.error('Get health stats error:', err);
-    return null;
-  }
-}
-
-// =====================================================
-// ฟังก์ชันดึงข้อมูลโค้ช
-// =====================================================
-export async function getCoach(userId: string) {
-  try {
-    // ดึงนัดหมายล่าสุดเพื่อหาโค้ช
-    const { data: appointment, error } = await supabase
-      .from('appointments')
-      .select(`
-        doctors (
-          full_name_th
-        )
-      `)
-      .eq('user_id', userId)
-      .order('appointment_date', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !appointment?.doctors) {
-      return 'โค้ชสมชาย'; // Default
-    }
-
-    return appointment.doctors.full_name_th;
-  } catch (err) {
-    console.error('Get coach error:', err);
-    return 'โค้ชสมชาย';
-  }
-}
-
-// =====================================================
-// ฟังก์ชันดึงชื่อโค้ช
-// =====================================================
-export async function getCoachName(coachId: string) {
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('full_name_th')
-      .eq('id', coachId)
-      .single();
-
-    if (error || !data) {
-      return 'โค้ชสุรชัย';
-    }
-
-    return data.full_name_th || 'โค้ชสุรชัย';
-  } catch (err) {
-    console.error('Get coach name error:', err);
-    return 'โค้ชสุรชัย';
-  }
-}
-
-// =====================================================
 // ฟังก์ชันดึงความรู้ (Knowledge)
 // =====================================================
 export async function getKnowledge(pamLevel: string = 'ALL') {
   try {
     console.log('📚 [getKnowledge] Fetching for pamLevel:', pamLevel);
     
-    // ดึงข้อมูลสำหรับ Level นี้ + ข้อมูลกลาง (ALL)
     const { data, error } = await supabase
       .from('knowledge')
       .select('*')

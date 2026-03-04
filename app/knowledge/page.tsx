@@ -110,14 +110,26 @@ useEffect(() => {
   }
 
   // จัดกลุ่มตาม category
-  const groupedKnowledge = knowledge.reduce((acc, item) => {
-    const category = item.category || 'general';
-    if (!acc[category]) {
-      acc[category] = [];
-    }
+// จัดกลุ่มตาม category (กำจัดข้อมูลซ้ำ)
+const groupedKnowledge = knowledge.reduce((acc, item) => {
+  const category = item.category || 'general';
+  if (!acc[category]) {
+    acc[category] = [];
+  }
+  
+  // ✅ ตรวจสอบว่า item นี้มีแล้วหรือไม่ (กันซ้ำ)
+  const exists = acc[category].some(
+    (existing: Knowledge) => 
+      existing.id === item.id || 
+      (existing.title === item.title && existing.pam_level === item.pam_level)
+  );
+  
+  if (!exists) {
     acc[category].push(item);
-    return acc;
-  }, {} as Record<string, Knowledge[]>);
+  }
+  
+  return acc;
+}, {} as Record<string, Knowledge[]>);
 
   const getCategoryName = (category: string) => {
     const names: Record<string, string> = {

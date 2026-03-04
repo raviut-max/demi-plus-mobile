@@ -215,7 +215,7 @@ export default function HomePage() {
               className="object-contain"
             />
             <Image
-              src="/images/logo.png"
+              src="/images/logo-full.png"
               alt="DeMi+ Logo"
               width={80}
               height={40}
