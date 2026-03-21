@@ -65,7 +65,7 @@ export function checkSession() {
     const loginDate = new Date(loginTime);
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - loginDate.getTime()) / (1000 * 60 * 60 * 24));
-
+    
     if (diffDays > 7) {
       logout();
       return null;
@@ -119,7 +119,10 @@ export async function saveRecord(data: {
   activity_id: string;
   record_date: string;
   is_completed: boolean;
-  [key: string]: any;
+  weight?: number;
+  blood_sugar?: number;
+  sweet_type?: string[];
+  exercise_type?: string;  // ✅ เพิ่ม field ใหม่
 }) {
   try {
     const { data: result, error } = await supabase
@@ -133,6 +136,7 @@ export async function saveRecord(data: {
         ...(data.weight !== undefined && { weight: data.weight }),
         ...(data.blood_sugar !== undefined && { blood_sugar: data.blood_sugar }),
         ...(data.sweet_type !== undefined && { sweet_type: data.sweet_type }),
+        ...(data.exercise_type !== undefined && { exercise_type: data.exercise_type }),  // ✅ เพิ่ม
       }, {
         onConflict: 'user_id,activity_id,record_date',
       })
@@ -156,10 +160,10 @@ export async function saveRecord(data: {
 export async function getTodayRecords(userId: string) {
   try {
     const today = new Date().toISOString().split('T')[0];
-
+    
     const { data, error } = await supabase
       .from('records')
-      .select('id, activity_id, is_completed, record_date, sweet_type, weight, blood_sugar')
+      .select('id, activity_id, is_completed, record_date, sweet_type, weight, blood_sugar, exercise_type')  // ✅ เพิ่ม exercise_type
       .eq('user_id', userId)
       .eq('record_date', today);
 
@@ -208,7 +212,14 @@ export async function getProgress(userId: string, days: number = 7) {
 
   const { data, error } = await supabase
     .from('records')
-    .select(`*, activities ( activity_code, activity_name_th, activity_type )`)
+    .select(`
+      *,
+      activities (
+        activity_code,
+        activity_name_th,
+        activity_type
+      )
+    `)
     .eq('user_id', userId)
     .gte('record_date', startDate.toISOString())
     .order('record_date', { ascending: false });
@@ -305,6 +316,41 @@ export async function getKnowledge(pamLevel: string = 'ALL') {
     return data || [];
   } catch (err) {
     console.error('❌ [getKnowledge] Error:', err);
+    return [];
+  }
+}
+
+// =====================================================
+// ✅ ฟังก์ชันสำหรับดึงรายการออกกำลังกายที่บันทึกไว้ (ย้อนหลัง)
+// =====================================================
+export async function getExerciseHistory(userId: string, days: number = 30) {
+  try {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from('records')
+      .select(`
+        *,
+        activities (
+          activity_code,
+          activity_name_th
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('activity_id', activities.find(a => a.activity_type === 'exercise')?.id)  // เฉพาะกิจกรรมออกกำลังกาย
+      .gte('record_date', startDate.toISOString())
+      .not('exercise_type', 'is', null)  // เฉพาะที่มีการบันทึก exercise_type
+      .order('record_date', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching exercise history:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Get exercise history error:', err);
     return [];
   }
 }
