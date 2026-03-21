@@ -122,7 +122,7 @@ export async function saveRecord(data: {
   weight?: number;
   blood_sugar?: number;
   sweet_type?: string[];
-  exercise_type?: string;  // ✅ เพิ่ม field ใหม่
+  exercise_minutes?: number;  // ✅ เพิ่ม field ใหม่
 }) {
   try {
     const { data: result, error } = await supabase
@@ -136,7 +136,7 @@ export async function saveRecord(data: {
         ...(data.weight !== undefined && { weight: data.weight }),
         ...(data.blood_sugar !== undefined && { blood_sugar: data.blood_sugar }),
         ...(data.sweet_type !== undefined && { sweet_type: data.sweet_type }),
-        ...(data.exercise_type !== undefined && { exercise_type: data.exercise_type }),  // ✅ เพิ่ม
+        ...(data.exercise_minutes !== undefined && { exercise_minutes: data.exercise_minutes }),  // ✅ เพิ่ม
       }, {
         onConflict: 'user_id,activity_id,record_date',
       })
@@ -163,7 +163,7 @@ export async function getTodayRecords(userId: string) {
     
     const { data, error } = await supabase
       .from('records')
-      .select('id, activity_id, is_completed, record_date, sweet_type, weight, blood_sugar, exercise_type')  // ✅ เพิ่ม exercise_type
+      .select('id, activity_id, is_completed, record_date, sweet_type, weight, blood_sugar, exercise_minutes')  // ✅ เพิ่ม exercise_minutes
       .eq('user_id', userId)
       .eq('record_date', today);
 
@@ -316,41 +316,6 @@ export async function getKnowledge(pamLevel: string = 'ALL') {
     return data || [];
   } catch (err) {
     console.error('❌ [getKnowledge] Error:', err);
-    return [];
-  }
-}
-
-// =====================================================
-// ✅ ฟังก์ชันสำหรับดึงรายการออกกำลังกายที่บันทึกไว้ (ย้อนหลัง)
-// =====================================================
-export async function getExerciseHistory(userId: string, days: number = 30) {
-  try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    const { data, error } = await supabase
-      .from('records')
-      .select(`
-        *,
-        activities (
-          activity_code,
-          activity_name_th
-        )
-      `)
-      .eq('user_id', userId)
-      .eq('activity_id', activities.find(a => a.activity_type === 'exercise')?.id)  // เฉพาะกิจกรรมออกกำลังกาย
-      .gte('record_date', startDate.toISOString())
-      .not('exercise_type', 'is', null)  // เฉพาะที่มีการบันทึก exercise_type
-      .order('record_date', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching exercise history:', error);
-      return [];
-    }
-
-    return data || [];
-  } catch (err) {
-    console.error('Get exercise history error:', err);
     return [];
   }
 }
