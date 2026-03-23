@@ -1,7 +1,7 @@
 import { supabase } from './client';
 
 // =====================================================
-// ฟังก์ชัน Login
+// Authentication & Session
 // =====================================================
 export async function login(idCard: string, password: string) {
   try {
@@ -13,9 +13,7 @@ export async function login(idCard: string, password: string) {
       .eq('is_active', true)
       .single();
 
-    if (error || !data) {
-      return null;
-    }
+    if (error || !data) return null;
 
     const { data: profile } = await supabase
       .from('profiles')
@@ -40,26 +38,18 @@ export async function login(idCard: string, password: string) {
   }
 }
 
-// =====================================================
-// ฟังก์ชัน Logout
-// =====================================================
 export async function logout() {
   localStorage.removeItem('user_id');
   localStorage.removeItem('user_data');
   localStorage.removeItem('login_time');
 }
 
-// =====================================================
-// ฟังก์ชันตรวจสอบ Session
-// =====================================================
 export function checkSession() {
   const userId = localStorage.getItem('user_id');
   const userData = localStorage.getItem('user_data');
   const loginTime = localStorage.getItem('login_time');
 
-  if (!userId || !userData) {
-    return null;
-  }
+  if (!userId || !userData) return null;
 
   if (loginTime) {
     const loginDate = new Date(loginTime);
@@ -75,7 +65,7 @@ export function checkSession() {
 }
 
 // =====================================================
-// ฟังก์ชันดึงข้อมูลผู้ใช้
+// Profile
 // =====================================================
 export async function getProfile(userId: string) {
   const { data, error } = await supabase
@@ -89,11 +79,9 @@ export async function getProfile(userId: string) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงกิจกรรมตาม PAM Level
+// Activities
 // =====================================================
 export async function getActivities(pamLevel: string) {
-  console.log('Fetching activities for pamLevel:', pamLevel);
-  
   const { data, error } = await supabase
     .from('activities')
     .select('*')
@@ -106,12 +94,11 @@ export async function getActivities(pamLevel: string) {
     return [];
   }
 
-  console.log('Activities fetched:', data?.length || 0);
   return data || [];
 }
 
 // =====================================================
-// ฟังก์ชันบันทึกกิจกรรม (ใช้ upsert)
+// Records
 // =====================================================
 export async function saveRecord(data: {
   user_id: string;
@@ -122,6 +109,7 @@ export async function saveRecord(data: {
   blood_sugar?: number;
   sweet_type?: string[];
   exercise_minutes?: number;
+  exercise_type?: string;
 }) {
   try {
     const { data: result, error } = await supabase
@@ -136,6 +124,7 @@ export async function saveRecord(data: {
         ...(data.blood_sugar !== undefined && { blood_sugar: data.blood_sugar }),
         ...(data.sweet_type !== undefined && { sweet_type: data.sweet_type }),
         ...(data.exercise_minutes !== undefined && { exercise_minutes: data.exercise_minutes }),
+        ...(data.exercise_type !== undefined && { exercise_type: data.exercise_type }),
       }, {
         onConflict: 'user_id,activity_id,record_date',
       })
@@ -153,13 +142,10 @@ export async function saveRecord(data: {
   }
 }
 
-// =====================================================
-// ฟังก์ชันดึงบันทึกวันนี้
-// =====================================================
 export async function getTodayRecords(userId: string) {
   try {
     const today = new Date().toISOString().split('T')[0];
-    
+
     const { data, error } = await supabase
       .from('records')
       .select(`
@@ -170,7 +156,8 @@ export async function getTodayRecords(userId: string) {
         sweet_type, 
         weight, 
         blood_sugar,
-        exercise_minutes
+        exercise_minutes,
+        exercise_type
       `)
       .eq('user_id', userId)
       .eq('record_date', today);
@@ -180,10 +167,33 @@ export async function getTodayRecords(userId: string) {
       return [];
     }
 
-    console.log('📝 Today records:', data);
     return data || [];
   } catch (err) {
     console.error('Get today records error:', err);
+    return [];
+  }
+}
+
+// =====================================================
+// Goals
+// =====================================================
+export async function getGoals(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('priority', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching goals:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Get goals error:', err);
     return [];
   }
 }
@@ -193,19 +203,36 @@ export async function getTodayRecords(userId: string) {
 // =====================================================
 export async function getWeeklyGoals(userId: string) {
   try {
-    const { data, error } = await supabase
+    // ✅ ดึง goals ทั้งหมดเรียงตาม created_at descending
+    const { data: allGoals, error } = await supabase
       .from('goals')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .eq('goal_type', 'weekly_activity');
+      .eq('goal_type', 'weekly_activity')
+      .order('goal_name')
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('Error fetching weekly goals:', error);
       return [];
     }
 
-    return data || [];
+    // ✅ กรองให้เหลือเฉพาะ goal ล่าสุดของแต่ละ goal_name
+    const uniqueGoalsMap = new Map<string, any>();
+    (allGoals || []).forEach((goal) => {
+      if (!uniqueGoalsMap.has(goal.goal_name)) {
+        uniqueGoalsMap.set(goal.goal_name, goal);
+      }
+    });
+
+    const uniqueGoals = Array.from(uniqueGoalsMap.values());
+    
+    console.log('🎯 [getWeeklyGoals] Total goals:', allGoals?.length || 0);
+    console.log('🎯 [getWeeklyGoals] Unique goals:', uniqueGoals.length);
+    console.log('🎯 [getWeeklyGoals] Goals:', uniqueGoals);
+
+    return uniqueGoals;
   } catch (err) {
     console.error('Get weekly goals error:', err);
     return [];
@@ -213,7 +240,7 @@ export async function getWeeklyGoals(userId: string) {
 }
 
 // =====================================================
-// ฟังก์ชันดึง Progress 7 วัน
+// Progress
 // =====================================================
 export async function getProgress(userId: string, days: number = 7) {
   const startDate = new Date();
@@ -238,34 +265,50 @@ export async function getProgress(userId: string, days: number = 7) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงเป้าหมาย
+// Exercise History
 // =====================================================
-export async function getGoals(userId: string) {
+export async function getExerciseHistory(userId: string, days: number = 30) {
   try {
-    console.log('Fetching goals for userId:', userId);
-    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data: exerciseActivities } = await supabase
+      .from('activities')
+      .select('id')
+      .eq('activity_type', 'exercise');
+
+    const exerciseActivityIds = exerciseActivities?.map(a => a.id) || [];
+    if (exerciseActivityIds.length === 0) return [];
+
     const { data, error } = await supabase
-      .from('goals')
-      .select('*')
+      .from('records')
+      .select(`
+        *,
+        activities (
+          activity_code,
+          activity_name_th
+        )
+      `)
       .eq('user_id', userId)
-      .eq('status', 'active')
-      .order('priority', { ascending: true });
+      .in('activity_id', exerciseActivityIds)
+      .gte('record_date', startDate.toISOString())
+      .not('exercise_minutes', 'is', null)
+      .order('record_date', { ascending: false });
 
     if (error) {
-      console.error('Error fetching goals:', error);
+      console.error('Error fetching exercise history:', error);
       return [];
     }
 
-    console.log('Goals fetched:', data?.length || 0);
     return data || [];
   } catch (err) {
-    console.error('Get goals error:', err);
+    console.error('Get exercise history error:', err);
     return [];
   }
 }
 
 // =====================================================
-// ฟังก์ชันดึงนัดหมายครั้งถัดไป
+// Appointments
 // =====================================================
 export async function getNextAppointment(userId: string) {
   try {
@@ -302,12 +345,10 @@ export async function getNextAppointment(userId: string) {
 }
 
 // =====================================================
-// ฟังก์ชันดึงความรู้ (Knowledge)
+// Knowledge
 // =====================================================
 export async function getKnowledge(pamLevel: string = 'ALL') {
   try {
-    console.log('📚 [getKnowledge] Fetching for pamLevel:', pamLevel);
-    
     const { data, error } = await supabase
       .from('knowledge')
       .select('*')
@@ -317,62 +358,85 @@ export async function getKnowledge(pamLevel: string = 'ALL') {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('❌ [getKnowledge] Error:', error);
+      console.error('Error fetching knowledge:', error);
       return [];
     }
 
-    console.log('✅ [getKnowledge] Fetched:', data?.length || 0, 'items');
     return data || [];
   } catch (err) {
-    console.error('❌ [getKnowledge] Error:', err);
+    console.error('Get knowledge error:', err);
     return [];
   }
 }
 
 // =====================================================
-// ✅ ฟังก์ชันสำหรับดึงรายการออกกำลังกายที่บันทึกไว้ (ย้อนหลัง) - แก้ไขแล้ว
+// ✅ Daily Notes (goal_daily_notes) - ใหม่
 // =====================================================
-export async function getExerciseHistory(userId: string, days: number = 30) {
+export async function saveDailyNote(data: {
+  user_id: string;
+  goal_id?: string;
+  activity_id?: string;
+  note_date: string;
+  note_text: string;
+  is_completed?: boolean;
+  actual_value?: number;
+  actual_unit?: string;
+  exercise_minutes?: number;
+  mood_level?: number;
+}) {
   try {
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-
-    // ✅ 1. ดึง activity IDs ที่เป็น exercise type ก่อน
-    const { data: exerciseActivities } = await supabase
-      .from('activities')
-      .select('id')
-      .eq('activity_type', 'exercise');
-
-    const exerciseActivityIds = exerciseActivities?.map(a => a.id) || [];
-
-    if (exerciseActivityIds.length === 0) {
-      return [];
-    }
-
-    // ✅ 2. Query records จาก activity IDs ที่ได้
-    const { data, error } = await supabase
-      .from('records')
-      .select(`
-        *,
-        activities (
-          activity_code,
-          activity_name_th
-        )
-      `)
-      .eq('user_id', userId)
-      .in('activity_id', exerciseActivityIds)
-      .gte('record_date', startDate.toISOString())
-      .not('exercise_minutes', 'is', null)
-      .order('record_date', { ascending: false });
+    const { data: result, error } = await supabase
+      .from('goal_daily_notes')
+      .upsert({
+        user_id: data.user_id,
+        goal_id: data.goal_id,
+        activity_id: data.activity_id,
+        note_date: data.note_date,
+        note_text: data.note_text,
+        is_completed: data.is_completed,
+        actual_value: data.actual_value,
+        actual_unit: data.actual_unit,
+        exercise_minutes: data.exercise_minutes,
+        mood_level: data.mood_level,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id,goal_id,note_date',
+      })
+      .select();
 
     if (error) {
-      console.error('Error fetching exercise history:', error);
-      return [];
+      console.error('Error saving daily note:', error);
+      return null;
     }
 
-    return data || [];
+    return result;
   } catch (err) {
-    console.error('Get exercise history error:', err);
-    return [];
+    console.error('Save daily note error:', err);
+    return null;
+  }
+}
+
+export async function getDailyNote(userId: string, noteDate?: string) {
+  try {
+    const date = noteDate || new Date().toISOString().split('T')[0];
+
+    const { data, error } = await supabase
+      .from('goal_daily_notes')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('note_date', date)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error fetching daily note:', error);
+      return null;
+    }
+
+    return data;
+  } catch (err) {
+    console.error('Get daily note error:', err);
+    return null;
   }
 }

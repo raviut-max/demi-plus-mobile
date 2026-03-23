@@ -1,3 +1,4 @@
+// app/admin/progress/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
