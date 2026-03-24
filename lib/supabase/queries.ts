@@ -175,41 +175,65 @@ export async function getTodayRecords(userId: string) {
 }
 
 // =====================================================
-// Goals
+// Goals - ✅ เพิ่มฟังก์ชันจัดการรอบการบันทึก
 // =====================================================
-export async function getGoals(userId: string) {
+
+// ✅ ฟังก์ชันนับจำนวนรอบการบันทึกเป้าหมาย
+export async function getGoalRoundCount(userId: string) {
+  try {
+    const { count, error } = await supabase
+      .from('goals')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('goal_type', 'weekly_activity')
+      .eq('status', 'archived');
+
+    if (error) {
+      console.error('Error counting goal rounds:', error);
+      return 0;
+    }
+
+    // จำนวนรอบ = จำนวน archived + 1 (รอบปัจจุบัน)
+    return (count || 0) + 1;
+  } catch (err) {
+    console.error('Get goal round count error:', err);
+    return 1;
+  }
+}
+
+// ✅ ฟังก์ชันดึงรอบล่าสุดที่บันทึก
+export async function getLatestGoalRound(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('round_number, created_at')
+      .eq('user_id', userId)
+      .eq('goal_type', 'weekly_activity')
+      .order('round_number', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error fetching latest goal round:', error);
+      return null;
+    }
+
+    return data?.[0] || null;
+  } catch (err) {
+    console.error('Get latest goal round error:', err);
+    return null;
+  }
+}
+
+// ✅ ฟังก์ชันดึงเป้าหมายรายสัปดาห์ (รอบปัจจุบันเท่านั้น)
+export async function getWeeklyGoals(userId: string) {
   try {
     const { data, error } = await supabase
       .from('goals')
       .select('*')
       .eq('user_id', userId)
       .eq('status', 'active')
-      .order('priority', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching goals:', error);
-      return [];
-    }
-
-    return data || [];
-  } catch (err) {
-    console.error('Get goals error:', err);
-    return [];
-  }
-}
-
-// =====================================================
-// ฟังก์ชันดึงเป้าหมายรายสัปดาห์
-// =====================================================
-export async function getWeeklyGoals(userId: string) {
-  try {
-    // ✅ ดึง goals ทั้งหมดเรียงตาม created_at descending
-    const { data: allGoals, error } = await supabase
-      .from('goals')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('status', 'active')
       .eq('goal_type', 'weekly_activity')
+      .eq('is_current', true)
       .order('goal_name')
       .order('created_at', { ascending: false });
 
@@ -218,24 +242,144 @@ export async function getWeeklyGoals(userId: string) {
       return [];
     }
 
-    // ✅ กรองให้เหลือเฉพาะ goal ล่าสุดของแต่ละ goal_name
-    const uniqueGoalsMap = new Map<string, any>();
-    (allGoals || []).forEach((goal) => {
-      if (!uniqueGoalsMap.has(goal.goal_name)) {
-        uniqueGoalsMap.set(goal.goal_name, goal);
-      }
-    });
-
-    const uniqueGoals = Array.from(uniqueGoalsMap.values());
-    
-    console.log('🎯 [getWeeklyGoals] Total goals:', allGoals?.length || 0);
-    console.log('🎯 [getWeeklyGoals] Unique goals:', uniqueGoals.length);
-    console.log('🎯 [getWeeklyGoals] Goals:', uniqueGoals);
-
-    return uniqueGoals;
+    console.log('🎯 [getWeeklyGoals] Fetched:', data?.length || 0, 'goals');
+    return data || [];
   } catch (err) {
     console.error('Get weekly goals error:', err);
     return [];
+  }
+}
+
+// ✅ ฟังก์ชันดึงประวัติการปรับเปลี่ยนเป้าหมาย (ทุก รอบ)
+export async function getGoalHistory(userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('goal_type', 'weekly_activity')
+      .in('status', ['active', 'archived'])
+      .order('round_number', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching goal history:', error);
+      return [];
+    }
+
+    // จัดกลุ่มตาม round_number
+    const roundsMap = new Map<number, any[]>();
+    (data || []).forEach((goal: any) => {
+      const round = goal.round_number || 1;
+      if (!roundsMap.has(round)) {
+        roundsMap.set(round, []);
+      }
+      roundsMap.get(round)!.push(goal);
+    });
+
+    const history = Array.from(roundsMap.entries()).map(([round, goals]) => ({
+      round_number: round,
+      goals: goals,
+      created_at: goals[0]?.created_at,
+      is_current: goals[0]?.is_current || false,
+    }));
+
+    console.log('📚 [getGoalHistory] Fetched:', history.length, 'rounds');
+    return history;
+  } catch (err) {
+    console.error('Get goal history error:', err);
+    return [];
+  }
+}
+
+// ✅ ฟังก์ชัน Archive Goals เดิม + สร้าง Goals ใหม่พร้อม Round Number
+export async function saveGoalsNewRound(data: {
+  user_id: string;
+  goals: Array<{
+    goal_name: string;
+    goal_name_th: string;
+    target_days: number;
+    target_value?: number;
+    target_unit?: string;
+    activity_id?: string;
+    primary_goal_note?: string;
+    weekly_goal_note?: string;
+  }>;
+  created_by: string;
+}) {
+  try {
+    console.log('💾 [saveGoalsNewRound] Starting...');
+
+    // 1. นับรอบถัดไป
+    const currentRound = await getGoalRoundCount(data.user_id);
+    const nextRound = currentRound;
+    
+    console.log('📊 [saveGoalsNewRound] Current round:', currentRound, '→ Next round:', nextRound);
+
+    // 2. Archive goals เดิม (status = active → archived, is_current = true → false)
+    const { error: archiveError } = await supabase
+      .from('goals')
+      .update({
+        status: 'archived',
+        is_current: false,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', data.user_id)
+      .eq('goal_type', 'weekly_activity')
+      .eq('status', 'active')
+      .eq('is_current', true);
+
+    if (archiveError) {
+      console.error('Error archiving goals:', archiveError);
+      return { success: false, error: archiveError.message };
+    }
+
+    console.log('✅ [saveGoalsNewRound] Archived old goals');
+
+    // 3. สร้าง goals ใหม่
+    const today = new Date().toISOString().split('T')[0];
+    const newGoals = data.goals.map(goal => ({
+      user_id: data.user_id,
+      goal_type: 'weekly_activity' as const,
+      goal_name: goal.goal_name,
+      goal_name_th: goal.goal_name_th,
+      target_days: goal.target_days,
+      target_value: goal.target_value || null,
+      target_unit: goal.target_unit || null,
+      activity_id: goal.activity_id || null,
+      status: 'active' as const,
+      is_current: true,
+      round_number: nextRound,
+      start_date: today,
+      priority: 1,
+      is_core_goal: true,
+      created_by: data.created_by,
+      primary_goal_note: goal.primary_goal_note || null,
+      weekly_goal_note: goal.weekly_goal_note || null,
+      last_recorded_date: today,
+    }));
+
+    console.log('📝 [saveGoalsNewRound] Creating', newGoals.length, 'new goals');
+
+    const { error: insertError } = await supabase
+      .from('goals')
+      .insert(newGoals);
+
+    if (insertError) {
+      console.error('Error creating new goals:', insertError);
+      return { success: false, error: insertError.message };
+    }
+
+    console.log('✅ [saveGoalsNewRound] Created new goals successfully');
+
+    return {
+      success: true,
+      round_number: nextRound,
+      goals_count: newGoals.length,
+    };
+  } catch (err) {
+    console.error('Save goals new round error:', err);
+    return { success: false, error: 'เกิดข้อผิดพลาดในการบันทึกเป้าหมาย' };
   }
 }
 
@@ -248,14 +392,7 @@ export async function getProgress(userId: string, days: number = 7) {
 
   const { data, error } = await supabase
     .from('records')
-    .select(`
-      *,
-      activities (
-        activity_code,
-        activity_name_th,
-        activity_type
-      )
-    `)
+    .select(`*, activities ( activity_code, activity_name_th, activity_type )`)
     .eq('user_id', userId)
     .gte('record_date', startDate.toISOString())
     .order('record_date', { ascending: false });
@@ -370,7 +507,7 @@ export async function getKnowledge(pamLevel: string = 'ALL') {
 }
 
 // =====================================================
-// ✅ Daily Notes (goal_daily_notes) - ใหม่
+// Daily Notes (goal_daily_notes)
 // =====================================================
 export async function saveDailyNote(data: {
   user_id: string;
@@ -378,11 +515,6 @@ export async function saveDailyNote(data: {
   activity_id?: string;
   note_date: string;
   note_text: string;
-  is_completed?: boolean;
-  actual_value?: number;
-  actual_unit?: string;
-  exercise_minutes?: number;
-  mood_level?: number;
 }) {
   try {
     const { data: result, error } = await supabase
@@ -393,11 +525,6 @@ export async function saveDailyNote(data: {
         activity_id: data.activity_id,
         note_date: data.note_date,
         note_text: data.note_text,
-        is_completed: data.is_completed,
-        actual_value: data.actual_value,
-        actual_unit: data.actual_unit,
-        exercise_minutes: data.exercise_minutes,
-        mood_level: data.mood_level,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'user_id,goal_id,note_date',

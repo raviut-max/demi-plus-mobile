@@ -16,7 +16,6 @@ const LONG_TERM_GOALS = [
   { code: 'remission', name_th: 'ภาวะเบาหวานสงบ', description: 'บรรลุ HbA1c < 6.5% โดยไม่ต้องใช้ยาต่อเนื่อง' },
 ];
 
-// ✅ เพิ่มฟิลด์ primary_goal_note และ weekly_goal_note
 interface WeeklyGoal {
   id: string;
   goal_name: string;
@@ -24,8 +23,8 @@ interface WeeklyGoal {
   target_days: number;
   target_value?: number;
   target_unit?: string;
-  primary_goal_note?: string;  // ✅ เพิ่ม
-  weekly_goal_note?: string;    // ✅ เพิ่ม
+  primary_goal_note?: string;
+  weekly_goal_note?: string;
 }
 
 export default function GoalsPage() {
@@ -49,28 +48,28 @@ export default function GoalsPage() {
 
     const fetchData = async () => {
       try {
-        console.log('🔍 Fetching data for user:', userData.id);
-        
         const [profileData, goalsData] = await Promise.all([
           getProfile(userData.id),
           getWeeklyGoals(userData.id)
         ]);
 
-        console.log('📊 Profile data:', profileData);
-        console.log('🎯 Weekly goals data:', goalsData);
-        console.log('🎯 Number of goals:', goalsData.length);
-
         setProfile(profileData);
+
+        // ✅ กรอง goals ไม่ให้ซ้ำ (ใช้ Map เพื่อเก็บ goal_name ที่ไม่ซ้ำ)
+        const uniqueGoalsMap = new Map<string, WeeklyGoal>();
+        goalsData.forEach((goal: WeeklyGoal) => {
+          if (!uniqueGoalsMap.has(goal.goal_name)) {
+            uniqueGoalsMap.set(goal.goal_name, goal);
+          }
+        });
+        
+        const uniqueGoals = Array.from(uniqueGoalsMap.values());
+        setWeeklyGoals(uniqueGoals);
 
         // ✅ โหลด primary goal จาก profile
         if (profileData?.primary_goal_code) {
-          console.log('⭐ Primary goal from profile:', profileData.primary_goal_code);
           setPrimaryGoal(profileData.primary_goal_code);
         }
-
-        // ✅ แสดง goals ทั้งหมด (ไม่กรองซ้ำ) - แสดงตามที่ admin บันทึก
-        console.log('✅ Setting weekly goals:', goalsData);
-        setWeeklyGoals(goalsData);
 
         // ✅ หา goal แรกที่มี notes (ไม่ใช่แค่ goal แรก)
         const goalWithPrimaryNote = goalsData.find((g: WeeklyGoal) => 
@@ -82,23 +81,15 @@ export default function GoalsPage() {
         );
 
         if (goalWithPrimaryNote) {
-          console.log('✅ Found primary_goal_note:', goalWithPrimaryNote.primary_goal_note);
           setPrimaryGoalNote(goalWithPrimaryNote.primary_goal_note || '');
-        } else {
-          console.log('⚠️ No primary_goal_note found');
-          setPrimaryGoalNote('');
         }
 
         if (goalWithWeeklyNote) {
-          console.log('✅ Found weekly_goal_note:', goalWithWeeklyNote.weekly_goal_note);
           setWeeklyNote(goalWithWeeklyNote.weekly_goal_note || '');
-        } else {
-          console.log('⚠️ No weekly_goal_note found');
-          setWeeklyNote('');
         }
 
       } catch (error) {
-        console.error('❌ Error fetching data:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
@@ -115,7 +106,7 @@ export default function GoalsPage() {
     );
   }
 
-  // ✅ แยก goals ตามประเภท (แสดงตาม target_days ที่บันทึกจริง)
+  // ✅ แยก goals ตามประเภท
   const foodGoals = weeklyGoals.filter(g => 
     ['stop_sweet', 'reduce_rice', 'protein_vegetable', 'carb_control', 'protein_intake', 'water_intake'].includes(g.goal_name)
   );
@@ -131,11 +122,6 @@ export default function GoalsPage() {
   const restGoals = weeklyGoals.filter(g => 
     ['sleep'].includes(g.goal_name)
   );
-
-  console.log('🍚 Food goals:', foodGoals);
-  console.log('🧘 Exercise goals:', exerciseGoals);
-  console.log('📝 primaryGoalNote:', primaryGoalNote);
-  console.log('📝 weeklyNote:', weeklyNote);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
