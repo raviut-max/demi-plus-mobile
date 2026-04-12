@@ -3,6 +3,7 @@ import { supabase } from './client';
 // =====================================================
 // Authentication & Session
 // =====================================================
+// lib/supabase/queries.ts
 export async function login(idCard: string, password: string) {
   try {
     const { data, error } = await supabase
@@ -15,23 +16,31 @@ export async function login(idCard: string, password: string) {
 
     if (error || !data) return null;
 
+    // ✅ โหลดข้อมูลล่าสุดจาก Database
     const { data: profile } = await supabase
       .from('profiles')
       .select('full_name, pam_level, pam_score, current_step, hospital_number, zone')
       .eq('id', data.id)
       .single();
 
-    return {
+    const userData = {
       id: data.id,
       id_card: data.id_card,
       full_name_th: profile?.full_name || 'ผู้ใช้',
-      pam_level: profile?.pam_level || 'L2',
+      pam_level: profile?.pam_level || 'L2',  // ✅ ค่าล่าสุดจาก Database
       pam_score: profile?.pam_score || 18,
       current_step: profile?.current_step || 'Starter',
       hospital_number: profile?.hospital_number || '',
       zone: profile?.zone || 'Green Zone',
       role: data.role,
     };
+
+    // ✅ บันทึก localStorage ด้วยค่าล่าสุดจาก Database
+    localStorage.setItem('user_id', data.id);
+    localStorage.setItem('user_data', JSON.stringify(userData));
+    localStorage.setItem('login_time', new Date().toISOString());
+
+    return userData;
   } catch (err) {
     console.error('Login error:', err);
     return null;
