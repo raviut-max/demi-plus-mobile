@@ -30,7 +30,6 @@ interface Activity {
   blood_sugar?: number;
   sweet_type?: string[];
   exercise_minutes?: number;
-  exercise_type?: string;
   target_minutes?: number;
 }
 
@@ -52,7 +51,6 @@ export default function RecordPage() {
   const [bloodSugar, setBloodSugar] = useState('');
 
   // Exercise Form States
-  const [selectedExerciseType, setSelectedExerciseType] = useState('');
   const [exerciseMinutes, setExerciseMinutes] = useState('');
   const [currentExerciseActivity, setCurrentExerciseActivity] = useState<Activity | null>(null);
 
@@ -69,25 +67,18 @@ export default function RecordPage() {
       return;
     }
     setUser(userData);
-    fetchData(userData);
+    fetchData();
   }, [router]);
 
-  const fetchData = async (userData: any) => {
+  const fetchData = async () => {
     try {
-      // ✅ 1. โหลด profile ก่อน
-      const profileData = await getProfile(userData.id);
+      const [profileData, activitiesData, recordsData] = await Promise.all([
+        getProfile(user.id),
+        getActivities(user.pam_level || 'L2'),
+        getTodayRecords(user.id)
+      ]);
+      
       setProfile(profileData);
-      
-      // ✅ 2. ใช้ pam_level จาก profile (ค่าจริงจากฐานข้อมูล)
-      const actualPamLevel = profileData?.pam_level || 'L2';
-      
-      console.log('📊 [Record Page] User from session:', userData.pam_level);
-      console.log('📊 [Record Page] Profile from DB:', actualPamLevel);
-      
-      // ✅ 3. โหลด activities ตาม pam_level จาก profile
-      const activitiesData = await getActivities(actualPamLevel);
-      
-      const recordsData = await getTodayRecords(userData.id);
       
       const activitiesWithRecords = activitiesData.map((activity: any) => {
         const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
@@ -99,30 +90,25 @@ export default function RecordPage() {
           blood_sugar: existingRecord?.blood_sugar,
           sweet_type: existingRecord?.sweet_type ?? [],
           exercise_minutes: existingRecord?.exercise_minutes,
-          exercise_type: existingRecord?.exercise_type,
           target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
         };
       });
-      
+
       setActivities(activitiesWithRecords);
       
       // โหลดหมายเหตุรายวัน
-      const noteData = await getDailyNote(userData.id);
+      const noteData = await getDailyNote(user.id);
       if (noteData?.note_text) {
         setDailyNote(noteData.note_text);
       }
-      
-      console.log('✅ [Record Page] Loaded', activitiesWithRecords.length, 'activities');
     } catch (error) {
-      console.error('❌ [Record Page] Error fetching data:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleActivity = async (id: string) => {
-    if (!user) return;
-    
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
@@ -152,17 +138,16 @@ export default function RecordPage() {
             }
           }
           
-          // ✅ ออกกำลังกาย - เปิดฟอร์ม พร้อมโหลดค่าเดิม
+          // ✅ ออกกำลังกาย - เปิดฟอร์ม (เฉพาะ L4)
           if (a.activity_type === 'exercise' && newCompleted) {
             setCurrentExerciseActivity(a);
-            // ✅ โหลดค่าเดิมที่เคยบันทึกไว้
-            setSelectedExerciseType(a.exercise_type || '');
+            // ✅ โหลดค่าเดิมที่เคยบันทึกไว้ หรือค่าเป้าหมาย
             setExerciseMinutes(a.exercise_minutes?.toString() || a.target_minutes?.toString() || '30');
             setShowExerciseForm(true);
             return { ...a, is_completed: false };
           }
           
-          // กิจกรรมทั่วไป
+          // กิจกรรมทั่วไป (L2/L3)
           if (user && newCompleted) {
             saveRecord({
               user_id: user.id,
@@ -241,6 +226,7 @@ export default function RecordPage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  // ✅ ฟังก์ชันบันทึกการออกกำลังกาย (L4)
   const handleSaveExercise = async () => {
     if (!exerciseMinutes || !user || !currentExerciseActivity) return;
     
@@ -250,7 +236,6 @@ export default function RecordPage() {
       record_date: new Date().toISOString().split('T')[0],
       is_completed: true,
       exercise_minutes: parseInt(exerciseMinutes),
-      exercise_type: selectedExerciseType || 'walking',
     });
 
     setActivities((prev) =>
@@ -260,14 +245,12 @@ export default function RecordPage() {
               ...a, 
               is_completed: true, 
               exercise_minutes: parseInt(exerciseMinutes),
-              exercise_type: selectedExerciseType || 'walking',
             }
           : a
       )
     );
 
     setShowExerciseForm(false);
-    setSelectedExerciseType('');
     setExerciseMinutes('');
     setCurrentExerciseActivity(null);
     setSaved(true);
@@ -314,9 +297,6 @@ export default function RecordPage() {
     );
   }
 
-  // ✅ ใช้ pam_level จาก profile
-  const actualPamLevel = profile?.pam_level || 'L2';
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
       <StarBackground />
@@ -327,7 +307,7 @@ export default function RecordPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-800">
-              กิจกรรมสำหรับนักกีฬา {actualPamLevel === 'L4' ? 'Champion' : actualPamLevel || 'L2'}
+              กิจกรรมสำหรับนักกีฬา {profile?.pam_level === 'L4' ? 'Champion' : profile?.pam_level || 'L2'}
             </h1>
             <p className="text-xs text-gray-500 mt-1">
               {new Date().toLocaleDateString('th-TH', {
@@ -560,97 +540,121 @@ export default function RecordPage() {
         </div>
       )}
 
-      {/* ✅ Exercise Form Modal - บันทึกเวลา */}
-      {showExerciseForm && (
+      {/* ✅ Exercise Form Modal - สำหรับ L4 (แบบง่ายตามรูปที่ 2) */}
+      {showExerciseForm && currentExerciseActivity && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
-            
-            {/* แสดงเป้าหมาย */}
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-800 font-semibold">
-                🎯 เป้าหมาย: <strong>{currentExerciseActivity?.target_minutes || 30} นาที/วัน</strong>
-              </p>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">⏱️</span>
+              <div>
+                <h2 className="text-lg font-bold text-gray-800">
+                  เวลาออกกำลังกาย ({currentExerciseActivity.activity_name_th})
+                </h2>
+                <p className="text-xs text-gray-500">
+                  เป้าหมาย: {currentExerciseActivity.target_minutes || 30} นาที/วัน
+                </p>
+              </div>
             </div>
             
-            <div className="space-y-4">
-              {/* ประเภทการออกกำลังกาย */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">เลือกประเภทการออกกำลังกาย</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: 'walking', label: '🚶 เดิน' },
-                    { value: 'running', label: '🏃 วิ่ง' },
-                    { value: 'weightlifting', label: '🏋️ ยกน้ำหนัก' },
-                    { value: 'aerobic', label: '💃 แอโรบิค' },
-                    { value: 'yoga', label: '🧘 โยคะ, ชี่กง, ไทชิ' },
-                    { value: 'other', label: '📌 อื่นๆ' },
-                  ].map((option) => (
-                    <label
-                      key={option.value}
-                      className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                        selectedExerciseType === option.value ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="exerciseType"
-                        checked={selectedExerciseType === option.value}
-                        onChange={() => setSelectedExerciseType(option.value)}
-                        className="w-4 h-4 text-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700">{option.label}</span>
-                    </label>
-                  ))}
+            {/* Input Field */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                ออกกำลังกายไปกี่นาที?
+              </label>
+              <input
+                type="number"
+                value={exerciseMinutes}
+                onChange={(e) => setExerciseMinutes(e.target.value)}
+                placeholder={`เช่น ${currentExerciseActivity.target_minutes || 30}`}
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg"
+                min="1"
+                max="180"
+                step="1"
+                autoFocus
+              />
+              {/* แสดงเปรียบเทียบกับเป้าหมาย */}
+              {exerciseMinutes && (
+                <div className="mt-2">
+                  {parseInt(exerciseMinutes) >= (currentExerciseActivity.target_minutes || 30) ? (
+                    <p className="text-sm text-green-600 font-semibold">✅ ทำได้ตามเป้าหมาย!</p>
+                  ) : (
+                    <p className="text-sm text-orange-600 font-semibold">
+                      ⚠️ ยังขาดอีก {(currentExerciseActivity.target_minutes || 30) - parseInt(exerciseMinutes)} นาที
+                    </p>
+                  )}
                 </div>
-              </div>
-
-              {/* เวลาออกกำลังกาย - ✅ แสดงค่าเดิม */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  ⏱️ เวลาออกกำลังกาย (นาที)
-                </label>
-                <input
-                  type="number"
-                  value={exerciseMinutes}
-                  onChange={(e) => setExerciseMinutes(e.target.value)}
-                  placeholder={`เช่น ${currentExerciseActivity?.target_minutes || 30}`}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min="5"
-                  max="180"
-                  step="5"
-                />
-                {/* แสดงเปรียบเทียบกับเป้าหมาย */}
-                {exerciseMinutes && (
-                  <div className="mt-2">
-                    {parseInt(exerciseMinutes) >= (currentExerciseActivity?.target_minutes || 30) ? (
-                      <p className="text-sm text-green-600 font-semibold">✅ ทำได้ตามเป้าหมาย!</p>
-                    ) : (
-                      <p className="text-sm text-orange-600 font-semibold">
-                        ⚠️ ยังขาดอีก {(currentExerciseActivity?.target_minutes || 30) - parseInt(exerciseMinutes)} นาที
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
-            <div className="flex gap-3 mt-6">
+            {/* Buttons */}
+            <div className="flex gap-3">
               <button
                 onClick={() => {
                   setShowExerciseForm(false);
-                  setSelectedExerciseType('');
                   setExerciseMinutes('');
                   setCurrentExerciseActivity(null);
+                }}
+                className="flex-1 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={handleSaveExercise}
+                disabled={!exerciseMinutes || parseInt(exerciseMinutes) <= 0}
+                className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                บันทึก
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sweet Type Form Modal */}
+      {showSweetForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <h2 className="text-lg font-bold text-gray-800 mb-2">🍬 วันนี้กินอะไรหวาน?</h2>
+            <p className="text-xs text-gray-500 mb-4">เลือกทุกข้อที่ตรงกับที่คุณกิน</p>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {sweetOptions.map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    selectedSweets.includes(option.value) ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSweets.includes(option.value)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSweets([...selectedSweets, option.value]);
+                      } else {
+                        setSelectedSweets(selectedSweets.filter((s) => s !== option.value));
+                      }
+                    }}
+                    className="w-5 h-5 rounded border-gray-300 text-red-500 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">{option.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowSweetForm(false);
+                  setSelectedSweets([]);
                 }}
                 className="flex-1 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
               >
                 ยกเลิก
               </button>
               <button
-                onClick={handleSaveExercise}
-                disabled={!exerciseMinutes}
-                className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleSaveSweet}
+                disabled={selectedSweets.length === 0}
+                className="flex-1 py-3 bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold rounded-xl hover:from-red-600 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 บันทึก
               </button>
@@ -690,13 +694,11 @@ function ActivitySection({
 }) {
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-      {/* Header */}
       <div className={`flex items-center gap-2 px-4 py-3 ${headerBg}`}>
         <span className="text-xl" role="img" aria-label={title}>{icon}</span>
         <h2 className="text-base font-bold text-gray-800">{title}</h2>
       </div>
 
-      {/* Activities */}
       <div className="p-4 space-y-2">
         {activities.map((activity) => (
           <div key={activity.id} className="flex items-center justify-between px-4 py-4 border-b border-gray-100 last:border-b-0">
