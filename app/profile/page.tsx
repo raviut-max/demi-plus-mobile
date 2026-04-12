@@ -1,3 +1,14 @@
+// =====================================================
+// ไฟล์: app/profile/page.tsx
+// หน้าโปรไฟล์ผู้ป่วย (Profile Page)
+// =====================================================
+// ฟีเจอร์:
+// - แสดงชื่อผู้ป่วยชัดเจน
+// - แสดง PAM Level (L2/L3/L4) พร้อมชื่อไทย
+// - แสดง Zone และ Confidence
+// - แสดงข้อมูลสุขภาพครบถ้วน
+// =====================================================
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -14,13 +25,16 @@ import {
   Heart,
   Target,
   LogOut,
-  Trophy
+  Trophy,
+  Award,
+  MapPin,
+  Phone,
+  Mail
 } from 'lucide-react';
 
 export default function ProfilePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  const [coachName, setCoachName] = useState('โค้ชสุรชัย');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -31,66 +45,36 @@ export default function ProfilePage() {
       return;
     }
     setUser(userData);
-
-    const fetchData = async () => {
-      try {
-        const profileData = await getProfile(userData.id);
-        setProfile(profileData);
-        
-        if (profileData?.coach_id) {
-          setCoachName('โค้ชสุรชัย');
-        } else {
-          setCoachName('โค้ชสุรชัย');
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [router]);
+
+  const fetchData = async () => {
+    try {
+      const profileData = await getProfile(user.id);
+      setProfile(profileData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
     router.push('/login');
   };
 
-  // คำนวณอายุ (รองรับ พ.ศ. และ ค.ศ.)
+  // คำนวณอายุ
   const calculateAge = (birthDate: string) => {
     if (!birthDate) return '-';
-    
-    try {
-      const today = new Date();
-      let birth: Date;
-      
-      const birthYear = parseInt(birthDate.split('-')[0]);
-      
-      if (birthYear > 2500) {
-        const thaiYear = birthYear - 543;
-        const thaiDate = birthDate.replace(`${birthYear}`, `${thaiYear}`);
-        birth = new Date(thaiDate);
-      } else {
-        birth = new Date(birthDate);
-      }
-      
-      if (isNaN(birth.getTime())) {
-        console.error('Invalid birth date:', birthDate);
-        return '-';
-      }
-      
-      let age = today.getFullYear() - birth.getFullYear();
-      const monthDiff = today.getMonth() - birth.getMonth();
-      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-        age--;
-      }
-      
-      return age > 0 && age < 150 ? age : '-';
-    } catch (error) {
-      console.error('Error calculating age:', error);
-      return '-';
+    const today = new Date();
+    const birth = new Date(birthDate);
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
     }
+    return age > 0 && age < 150 ? age : '-';
   };
 
   // แปลง gender เป็นภาษาไทย
@@ -108,50 +92,62 @@ export default function ProfilePage() {
     return (weight / (heightInMeters * heightInMeters)).toFixed(1);
   };
 
-  // คำนวณระยะเวลาเบาหวาน
-  const calculateDiabetesDuration = (birthDate: string, diagnosisAge: number = 50) => {
-    if (!birthDate) return '-';
-    
-    try {
-      const birthYear = parseInt(birthDate.split('-')[0]);
-      let actualBirthYear = birthYear;
-      
-      if (birthYear > 2500) {
-        actualBirthYear = birthYear - 543;
-      }
-      
-      const diagnosisYear = actualBirthYear + diagnosisAge;
-      const currentYear = new Date().getFullYear();
-      const years = currentYear - diagnosisYear;
-      
-      return years > 0 && years < 100 ? `${years} ปี` : '-';
-    } catch (error) {
-      console.error('Error calculating diabetes duration:', error);
-      return '-';
+  // ✅ แสดงชื่อ Level ตาม PAM Level ที่ถูกต้อง
+  const getPAMLevelInfo = (pamLevel: string) => {
+    switch (pamLevel) {
+      case 'L4':
+        return { 
+          thai: 'กลุ่มแชมเปี้ยน', 
+          en: 'Champion', 
+          desc: 'PAM 80%+',
+          color: 'bg-green-100 text-green-700 border-green-300',
+          icon: '🏆'
+        };
+      case 'L3':
+        return { 
+          thai: 'กลุ่มรักสุขภาพ', 
+          en: 'Intensive', 
+          desc: 'PAM 41-79%',
+          color: 'bg-blue-100 text-blue-700 border-blue-300',
+          icon: '💪'
+        };
+      case 'L2':
+        return { 
+          thai: 'กลุ่มทั่วไป', 
+          en: 'General', 
+          desc: 'PAM 21-40%',
+          color: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+          icon: '📊'
+        };
+      default:
+        return { 
+          thai: 'ไม่พร้อม', 
+          en: 'Uncontrolled', 
+          desc: 'PAM 0-20%',
+          color: 'bg-red-100 text-red-700 border-red-300',
+          icon: '⚠️'
+        };
     }
   };
 
-  // ✅ แสดงชื่อ Level ตาม PAM Level ที่ถูกต้อง
-  const getPAMLevelName = (pamLevel: string) => {
-    switch (pamLevel) {
-      case 'L4':
-        return { thai: 'กลุ่มแชมเปี้ยน', en: 'Champion', desc: 'PAM 80%+' };
-      case 'L3':
-        return { thai: 'กลุ่มรักสุขภาพ', en: 'Intensive', desc: 'PAM 41-79%' };
-      case 'L2':
-        return { thai: 'กลุ่มทั่วไป', en: 'General', desc: 'PAM 21-40%' };
+  // ✅ แสดงชื่อ Zone
+  const getZoneInfo = (zone: string) => {
+    switch (zone) {
+      case 'Green Zone':
+        return { color: 'bg-green-100 text-green-700', icon: '💚' };
+      case 'Yellow Zone':
+        return { color: 'bg-yellow-100 text-yellow-700', icon: '💛' };
+      case 'Red Zone':
+        return { color: 'bg-red-100 text-red-700', icon: '❤️' };
       default:
-        return { thai: 'ไม่พร้อม', en: 'Uncontrolled', desc: 'PAM 0-20%' };
+        return { color: 'bg-gray-100 text-gray-700', icon: '🤍' };
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">กำลังโหลด...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -163,35 +159,82 @@ export default function ProfilePage() {
   const height = profile?.height || 165;
   const bmi = calculateBMI(weight, height);
   const waist = profile?.waist_circumference || 92;
-  const diabetesDuration = calculateDiabetesDuration(profile?.birth_date);
-  const pamLevelName = getPAMLevelName(profile?.pam_level || 'L2');
+  const pamLevelInfo = getPAMLevelInfo(profile?.pam_level || 'L2');
+  const zoneInfo = getZoneInfo(profile?.zone || 'Green Zone');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-cyan-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
       <StarBackground />
-      
+
       <div className="max-w-md mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <Image
-            src="/images/mascot-main.png"
-            alt="Mascot"
-            width={40}
-            height={48}
-            className="object-contain"
-          />
-          <div>
-            <h1 className="text-2xl font-bold text-purple-800">โปรไฟล์นักกีฬา</h1>
-            <p className="text-lg font-bold text-purple-700 mt-1">
-              {profile?.full_name || 'ผู้ใช้'}
-            </p>
-            <p className="text-sm text-purple-600">
-              HN: {profile?.hospital_number || 'HN-001'}
-            </p>
+        
+        {/* =====================================================
+            Header - แสดงชื่อผู้ป่วยชัดเจน
+            ===================================================== */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <Image
+              src="/images/mascot-main.png"
+              alt="Mascot"
+              width={48}
+              height={48}
+              className="object-contain"
+            />
+            <div>
+              {/* ✅ ชื่อผู้ป่วย - ตัวใหญ่ชัดเจน */}
+              <h1 className="text-2xl font-bold text-purple-800">
+                {profile?.full_name || 'ผู้ใช้'}
+              </h1>
+              {/* ✅ HN - เล็กกว่า */}
+              <p className="text-sm text-purple-600 font-medium">
+                HN: {profile?.hospital_number || 'HN-001'}
+              </p>
+            </div>
+          </div>
+          
+          {/* ✅ ปุ่ม Logout */}
+          <button
+            onClick={handleLogout}
+            className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+            title="ออกจากระบบ"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* =====================================================
+            PAM Level Badge - แสดงชัดเจนด้านบน
+            ===================================================== */}
+        <div className={`mb-4 p-4 rounded-2xl border-2 ${pamLevelInfo.color}`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">{pamLevelInfo.icon}</span>
+              <div>
+                {/* ✅ PAM Level Code (L2/L3/L4) */}
+                <p className="text-2xl font-bold">
+                  {profile?.pam_level || 'L2'}
+                </p>
+                {/* ✅ PAM Level Name (ไทย + อังกฤษ) */}
+                <p className="text-sm font-semibold">
+                  {pamLevelInfo.thai} ({pamLevelInfo.en})
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              {/* ✅ PAM Score */}
+              <p className="text-lg font-bold">
+                {profile?.pam_score || 0}/20
+              </p>
+              <p className="text-xs opacity-75">
+                {pamLevelInfo.desc}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Basic Info Card */}
+        {/* =====================================================
+            ข้อมูลพื้นฐาน Card
+            ===================================================== */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-purple-200 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-purple-400 to-pink-400 px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -202,6 +245,7 @@ export default function ProfilePage() {
           </div>
           
           <div className="p-4 space-y-3">
+            {/* อายุ */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                 <Calendar className="w-5 h-5 text-red-600" />
@@ -212,6 +256,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* เพศ */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <User className="w-5 h-5 text-blue-600" />
@@ -222,6 +267,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* น้ำหนัก */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <Scale className="w-5 h-5 text-blue-600" />
@@ -232,6 +278,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* ส่วนสูง */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <Ruler className="w-5 h-5 text-blue-600" />
@@ -242,6 +289,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* BMI */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                 <Activity className="w-5 h-5 text-green-600" />
@@ -252,6 +300,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* รอบเอว */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
                 <Target className="w-5 h-5 text-yellow-600" />
@@ -261,30 +310,12 @@ export default function ProfilePage() {
                 <p className="text-base font-bold text-gray-800">{waist} ซม.</p>
               </div>
             </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                <Heart className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-gray-500">เบาหวาน</p>
-                <p className="text-base font-bold text-gray-800">{diabetesDuration}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-purple-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-gray-500">โค้ช</p>
-                <p className="text-base font-bold text-gray-800">{coachName}</p>
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Assessment Results Card - ✅ แก้ไขใหม่ */}
+        {/* =====================================================
+            ผลการประเมิน Card - แสดง PAM และ Zone ชัดเจน
+            ===================================================== */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-yellow-200 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-yellow-400 to-orange-400 px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -295,54 +326,120 @@ export default function ProfilePage() {
           </div>
           
           <div className="p-4 space-y-3">
-            {/* PAM Level - ✅ แสดงตาม Level จริง */}
+            {/* ✅ PAM Level - แสดงชัดเจน */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-green-600" />
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <Trophy className="w-6 h-6 text-green-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm text-gray-500">PAM</p>
-                <p className="text-base font-bold text-gray-800">
-                  {pamLevelName.thai} ({pamLevelName.en})
+                <p className="text-sm text-gray-500 font-medium">PAM Level</p>
+                {/* ✅ แสดง L2/L3/L4 + ชื่อไทย + ชื่ออังกฤษ */}
+                <p className="text-lg font-bold text-gray-800">
+                  {profile?.pam_level || 'L2'} - {pamLevelInfo.thai}
                 </p>
                 <p className="text-xs text-gray-500">
-                  คะแนน {profile?.pam_score || 0}/20 ({pamLevelName.desc})
+                  {pamLevelInfo.en} • {pamLevelInfo.desc}
                 </p>
+              </div>
+              <div className={`px-3 py-2 rounded-full text-sm font-bold ${pamLevelInfo.color}`}>
+                {pamLevelInfo.icon}
               </div>
             </div>
 
-            {/* PROMs Zone */}
+            {/* ✅ PROMs Zone - แสดงชัดเจน */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                <Heart className="w-5 h-5 text-red-600" />
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <Heart className="w-6 h-6 text-red-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm text-gray-500">PROMs</p>
-                <p className="text-base font-bold text-green-600">
+                <p className="text-sm text-gray-500 font-medium">PROMs Zone</p>
+                <p className="text-lg font-bold text-gray-800">
                   {profile?.zone || 'Green Zone'}
                 </p>
+              </div>
+              <div className={`px-3 py-2 rounded-full text-sm font-bold ${zoneInfo.color}`}>
+                {zoneInfo.icon}
               </div>
             </div>
 
             {/* Confidence */}
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <Target className="w-5 h-5 text-blue-600" />
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <Award className="w-6 h-6 text-blue-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm text-gray-500">Confidence</p>
-                <p className="text-base font-bold text-gray-800">8/10 ✅ ดี</p>
+                <p className="text-sm text-gray-500 font-medium">Confidence</p>
+                <p className="text-lg font-bold text-gray-800">8/10 ✅ ดี</p>
               </div>
             </div>
 
             {/* Quote */}
-            <div className="bg-green-50 rounded-xl p-3 text-center">
-              <p className="text-sm text-green-700 font-semibold">"มั่นใจมาก! วันนี้ทำได้แน่นอน"</p>
+            <div className="bg-green-50 rounded-xl p-3 text-center border border-green-200">
+              <p className="text-sm text-green-700 font-semibold">
+                "มั่นใจมาก! วันนี้ทำได้แน่นอน"
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Logout Button */}
+        {/* =====================================================
+            ข้อมูลเพิ่มเติม (ถ้ามี)
+            ===================================================== */}
+        {(profile?.phone || profile?.email || profile?.subdistrict) && (
+          <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-blue-200 overflow-hidden mb-4">
+            <div className="bg-gradient-to-r from-blue-400 to-cyan-400 px-4 py-3">
+              <div className="flex items-center justify-center gap-2">
+                <span className="text-2xl">📍</span>
+                <h2 className="text-lg font-bold text-white">ข้อมูลติดต่อ</h2>
+                <span className="text-2xl">📍</span>
+              </div>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {profile?.phone && (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Phone className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-500">เบอร์โทรศัพท์</p>
+                    <p className="text-base font-bold text-gray-800">{profile.phone}</p>
+                  </div>
+                </div>
+              )}
+              
+              {profile?.email && (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                    <Mail className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-500">อีเมล</p>
+                    <p className="text-base font-bold text-gray-800">{profile.email}</p>
+                  </div>
+                </div>
+              )}
+              
+              {profile?.subdistrict && (
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                    <MapPin className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-500">ที่อยู่</p>
+                    <p className="text-base font-bold text-gray-800">
+                      {profile.subdistrict}, {profile.district}, {profile.province}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            Logout Button - ขนาดใหญ่ชัดเจน
+            ===================================================== */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold rounded-2xl hover:from-red-600 hover:to-pink-700 transition-all shadow-lg"
