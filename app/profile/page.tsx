@@ -1,4 +1,13 @@
-// app/profile/page.tsx
+// =====================================================
+// ไฟล์: app/profile/page.tsx
+// หน้าโปรไฟล์ผู้ป่วย (Profile Page)
+// =====================================================
+// ฟีเจอร์:
+// - แสดงชื่อผู้ป่วยชัดเจนด้านบน
+// - แสดง PAM Level พร้อมชื่อไทย
+// - แสดงข้อมูลสุขภาพครบถ้วน
+// =====================================================
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -15,8 +24,7 @@ import {
   Heart,
   Target,
   LogOut,
-  Trophy,
-  Award
+  Trophy
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -31,31 +39,23 @@ export default function ProfilePage() {
       router.push('/login');
       return;
     }
-    
     setUser(userData);
-    // ✅ ส่ง userData เข้าไปโดยตรง
     fetchData(userData);
   }, [router]);
 
-  // ✅ แก้ไข: รับ userData เป็น parameter
+  // ✅ แก้ไข: รับ userData และแสดง logging
   const fetchData = async (userData: any) => {
     try {
-      // ✅ ตรวจสอบว่า userData มี id หรือไม่
-      if (!userData || !userData.id) {
-        console.error('❌ User data is invalid:', userData);
-        router.push('/login');
-        return;
-      }
-
       console.log('📊 Fetching profile for user:', userData.id);
       
       const profileData = await getProfile(userData.id);
-      setProfile(profileData);
       
       console.log('✅ Profile loaded:', profileData);
+      console.log('📋 Patient name:', profileData?.first_name, profileData?.last_name);
+      
+      setProfile(profileData);
     } catch (error) {
       console.error('❌ Error fetching data:', error);
-      alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
@@ -69,14 +69,36 @@ export default function ProfilePage() {
   // คำนวณอายุ
   const calculateAge = (birthDate: string) => {
     if (!birthDate) return '-';
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
+    try {
+      const today = new Date();
+      let birth: Date;
+      
+      const birthYear = parseInt(birthDate.split('-')[0]);
+      
+      if (birthYear > 2500) {
+        const thaiYear = birthYear - 543;
+        const thaiDate = birthDate.replace(`${birthYear}`, `${thaiYear}`);
+        birth = new Date(thaiDate);
+      } else {
+        birth = new Date(birthDate);
+      }
+      
+      if (isNaN(birth.getTime())) {
+        console.error('Invalid birth date:', birthDate);
+        return '-';
+      }
+      
+      let age = today.getFullYear() - birth.getFullYear();
+      const monthDiff = today.getMonth() - birth.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+        age--;
+      }
+      
+      return age > 0 && age < 150 ? age : '-';
+    } catch (error) {
+      console.error('Error calculating age:', error);
+      return '-';
     }
-    return age > 0 && age < 150 ? age : '-';
   };
 
   // แปลง gender
@@ -94,7 +116,7 @@ export default function ProfilePage() {
     return (weight / (heightInMeters * heightInMeters)).toFixed(1);
   };
 
-  // แสดงชื่อ Level
+  // ✅ แสดงชื่อ Level ตาม PAM Level
   const getPAMLevelName = (pamLevel: string) => {
     switch (pamLevel) {
       case 'L4':
@@ -108,6 +130,24 @@ export default function ProfilePage() {
     }
   };
 
+  // ✅ ฟังก์ชันแสดงชื่อผู้ป่วยเต็ม
+  const getPatientFullName = () => {
+    if (!profile) return 'กำลังโหลด...';
+    
+    // ✅ ลองใช้ first_name + last_name ก่อน
+    if (profile.first_name && profile.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    
+    // ✅ ถ้าไม่มี ให้ใช้ full_name
+    if (profile.full_name) {
+      return profile.full_name;
+    }
+    
+    // ✅ ถ้าไม่มีอะไรเลย ให้ใช้ HN
+    return profile.hospital_number || 'ผู้ใช้';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -116,6 +156,7 @@ export default function ProfilePage() {
     );
   }
 
+  // ข้อมูลจาก Database
   const age = calculateAge(profile?.birth_date);
   const gender = getGenderThai(profile?.gender);
   const weight = profile?.current_weight || 75.5;
@@ -130,7 +171,9 @@ export default function ProfilePage() {
 
       <div className="max-w-md mx-auto px-4 py-6">
         
-        {/* Header */}
+        {/* =====================================================
+            Header - แสดงชื่อผู้ป่วยชัดเจน
+            ===================================================== */}
         <div className="flex items-center gap-3 mb-6">
           <Image
             src="/images/mascot-main.png"
@@ -139,20 +182,21 @@ export default function ProfilePage() {
             height={48}
             className="object-contain"
           />
-          <div>
+          <div className="flex-1">
+            {/* ✅ ชื่อผู้ป่วย - ตัวใหญ่ชัดเจน */}
             <h1 className="text-2xl font-bold text-purple-800">
-              โปรไฟล์นักกีฬา
+              {getPatientFullName()}
             </h1>
-            <p className="text-lg font-bold text-purple-700 mt-1">
-              {profile?.full_name || 'ผู้ใช้'}
-            </p>
+            {/* ✅ HN - เล็กกว่า */}
             <p className="text-sm text-purple-600">
               HN: {profile?.hospital_number || 'HN-001'}
             </p>
           </div>
         </div>
 
-        {/* PAM Level Badge */}
+        {/* =====================================================
+            PAM Level Badge - แสดงชัดเจนด้านบน
+            ===================================================== */}
         <div className={`mb-4 p-4 rounded-2xl border-2 ${
           profile?.pam_level === 'L4' ? 'bg-green-100 text-green-700 border-green-300' :
           profile?.pam_level === 'L3' ? 'bg-blue-100 text-blue-700 border-blue-300' :
@@ -163,15 +207,18 @@ export default function ProfilePage() {
             <div className="flex items-center gap-3">
               <Trophy className="w-8 h-8" />
               <div>
+                {/* ✅ PAM Level Code */}
                 <p className="text-2xl font-bold">
                   {profile?.pam_level || 'L2'}
                 </p>
+                {/* ✅ PAM Level Name */}
                 <p className="text-sm font-semibold">
                   {pamLevelName.thai} ({pamLevelName.en})
                 </p>
               </div>
             </div>
             <div className="text-right">
+              {/* ✅ PAM Score */}
               <p className="text-lg font-bold">
                 {profile?.pam_score || 0}/20
               </p>
@@ -182,7 +229,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Basic Info Card */}
+        {/* =====================================================
+            ข้อมูลพื้นฐาน Card
+            ===================================================== */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-purple-200 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-purple-400 to-pink-400 px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -193,6 +242,7 @@ export default function ProfilePage() {
           </div>
           
           <div className="p-4 space-y-3">
+            {/* อายุ */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                 <Calendar className="w-5 h-5 text-red-600" />
@@ -203,6 +253,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* เพศ */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <User className="w-5 h-5 text-blue-600" />
@@ -213,6 +264,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* น้ำหนัก */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <Scale className="w-5 h-5 text-blue-600" />
@@ -223,6 +275,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* ส่วนสูง */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                 <Ruler className="w-5 h-5 text-blue-600" />
@@ -233,6 +286,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* BMI */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                 <Activity className="w-5 h-5 text-green-600" />
@@ -243,6 +297,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* รอบเอว */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
                 <Target className="w-5 h-5 text-yellow-600" />
@@ -255,7 +310,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Assessment Results Card */}
+        {/* =====================================================
+            ผลการประเมิน Card
+            ===================================================== */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-yellow-200 overflow-hidden mb-4">
           <div className="bg-gradient-to-r from-yellow-400 to-orange-400 px-4 py-3">
             <div className="flex items-center justify-center gap-2">
@@ -266,6 +323,7 @@ export default function ProfilePage() {
           </div>
           
           <div className="p-4 space-y-3">
+            {/* PAM Level */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
                 <Trophy className="w-5 h-5 text-green-600" />
@@ -281,6 +339,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* PROMs Zone */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
                 <Heart className="w-5 h-5 text-red-600" />
@@ -293,9 +352,10 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Confidence */}
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <Award className="w-5 h-5 text-blue-600" />
+                <Target className="w-5 h-5 text-blue-600" />
               </div>
               <div className="flex-1">
                 <p className="text-sm text-gray-500">Confidence</p>
@@ -303,7 +363,8 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="bg-green-50 rounded-xl p-3 text-center border border-green-200">
+            {/* Quote */}
+            <div className="bg-green-50 rounded-xl p-3 text-center">
               <p className="text-sm text-green-700 font-semibold">
                 "มั่นใจมาก! วันนี้ทำได้แน่นอน"
               </p>
@@ -311,7 +372,9 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Logout Button */}
+        {/* =====================================================
+            Logout Button
+            ===================================================== */}
         <button
           onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 py-4 bg-gradient-to-r from-red-500 to-pink-600 text-white font-bold rounded-2xl hover:from-red-600 hover:to-pink-700 transition-all shadow-lg"
