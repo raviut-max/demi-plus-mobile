@@ -67,17 +67,29 @@ export default function RecordPage() {
       router.push('/login');
       return;
     }
-
+    
     setUser(userData);
-    fetchData();
+    // ✅ ส่ง userData เข้าไปโดยตรง แทนที่จะใช้ user state
+    fetchData(userData);
   }, [router]);
 
-  const fetchData = async () => {
+  // ✅ แก้ไข: รับ userData เป็น parameter
+  const fetchData = async (userData: any) => {
     try {
+      // ✅ ตรวจสอบว่า userData มี id หรือไม่
+      if (!userData || !userData.id) {
+        console.error('❌ User data is invalid:', userData);
+        router.push('/login');
+        return;
+      }
+
+      console.log('📊 Fetching data for user:', userData.id);
+      console.log('📊 User PAM Level:', userData.pam_level);
+
       const [profileData, activitiesData, recordsData] = await Promise.all([
-        getProfile(user.id),
-        getActivities(user.pam_level || 'L2'),
-        getTodayRecords(user.id)
+        getProfile(userData.id),
+        getActivities(userData.pam_level || 'L2'),
+        getTodayRecords(userData.id)
       ]);
 
       setProfile(profileData);
@@ -99,18 +111,28 @@ export default function RecordPage() {
       setActivities(activitiesWithRecords);
 
       // โหลดหมายเหตุรายวัน
-      const noteData = await getDailyNote(user.id);
+      const noteData = await getDailyNote(userData.id);
       if (noteData?.note_text) {
         setDailyNote(noteData.note_text);
       }
+
+      console.log('✅ Data loaded successfully');
+      console.log('📋 Activities count:', activitiesWithRecords.length);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('❌ Error fetching data:', error);
+      alert('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
   };
 
   const toggleActivity = async (id: string) => {
+    if (!user || !user.id) {
+      alert('กรุณาเข้าสู่ระบบอีกครั้ง');
+      router.push('/login');
+      return;
+    }
+
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
@@ -172,7 +194,7 @@ export default function RecordPage() {
   };
 
   const handleSaveSweet = async () => {
-    if (selectedSweets.length === 0 || !user) return;
+    if (selectedSweets.length === 0 || !user || !user.id) return;
 
     const sweetActivity = activities.find(a => a.activity_code === 'stop_sweet');
     if (!sweetActivity) return;
@@ -203,7 +225,7 @@ export default function RecordPage() {
   };
 
   const handleSaveWeight = async () => {
-    if (!weight || !bloodSugar || !user) return;
+    if (!weight || !bloodSugar || !user || !user.id) return;
 
     const weightActivity = activities.find(a => a.activity_code === 'record_weight_sugar');
     if (!weightActivity) return;
@@ -231,7 +253,7 @@ export default function RecordPage() {
   };
 
   const handleSaveExercise = async () => {
-    if (!selectedExerciseType || !exerciseMinutes || !user || !currentExerciseActivity) return;
+    if (!selectedExerciseType || !exerciseMinutes || !user || !user.id || !currentExerciseActivity) return;
 
     await saveRecord({
       user_id: user.id,
@@ -263,7 +285,7 @@ export default function RecordPage() {
   };
 
   const handleSaveDailyNote = async () => {
-    if (!user || !dailyNote.trim()) return;
+    if (!user || !user.id || !dailyNote.trim()) return;
 
     setSavingNote(true);
 
@@ -550,14 +572,14 @@ export default function RecordPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
-
+            
             {/* แสดงเป้าหมาย */}
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-semibold">
                 🎯 เป้าหมาย: <strong>{currentExerciseActivity?.target_minutes || 30} นาที/วัน</strong>
               </p>
             </div>
-
+            
             <div className="space-y-4">
               {/* ประเภทการออกกำลังกาย */}
               <div>
