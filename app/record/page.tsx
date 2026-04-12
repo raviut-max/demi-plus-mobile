@@ -74,15 +74,14 @@ export default function RecordPage() {
   // ✅ แก้ไข: รับ userData และโหลด PAM จากฐานข้อมูล
   const fetchData = async (userData: any) => {
     try {
-      console.log('📊 Fetching data for user:', userData.id);
-      console.log('📊 User PAM Level from session:', userData.pam_level);
-      
       // ✅ 1. โหลด Profile จากฐานข้อมูล (ได้ PAM Level จริง)
       const profileData = await getProfile(userData.id);
       setProfile(profileData);
       
       // ✅ 2. ใช้ PAM Level จากฐานข้อมูล (ไม่ใช่จาก localStorage)
       const actualPamLevel = profileData?.pam_level || 'L2';
+      
+      console.log('📊 User PAM Level from session:', userData.pam_level);
       console.log('📊 Actual PAM Level from database:', actualPamLevel);
       
       // ✅ 3. โหลด Activities ตาม PAM Level จากฐานข้อมูล
@@ -104,7 +103,6 @@ export default function RecordPage() {
       });
 
       setActivities(activitiesWithRecords);
-      console.log('✅ Loaded', activitiesWithRecords.length, 'activities');
 
       // โหลดหมายเหตุรายวัน
       const noteData = await getDailyNote(userData.id);
@@ -167,10 +165,11 @@ export default function RecordPage() {
             }
           }
 
-          // ออกกำลังกาย - เปิดฟอร์ม
+          // ✅ ออกกำลังกาย - เปิดฟอร์ม (แยกตาม PAM Level)
           if (a.activity_type === 'exercise' && newCompleted) {
             setCurrentExerciseActivity(a);
             setSelectedExerciseType('');
+            // ✅ โหลดค่าเดิมที่เคยบันทึกไว้ หรือค่าเป้าหมาย
             setExerciseMinutes(a.exercise_minutes?.toString() || '');
             setShowExerciseForm(true);
             return { ...a, is_completed: false };
@@ -256,7 +255,8 @@ export default function RecordPage() {
   };
 
   const handleSaveExercise = async () => {
-    if (!selectedExerciseType || !exerciseMinutes || !user || !currentExerciseActivity) return;
+    if (!exerciseMinutes || !user || !currentExerciseActivity) return;
+    
     await saveRecord({
       user_id: user.id,
       activity_id: currentExerciseActivity.id,
@@ -268,11 +268,10 @@ export default function RecordPage() {
     setActivities((prev) =>
       prev.map((a) =>
         a.id === currentExerciseActivity.id
-          ? {
-              ...a,
-              is_completed: true,
+          ? { 
+              ...a, 
+              is_completed: true, 
               exercise_minutes: parseInt(exerciseMinutes),
-              exercise_type: selectedExerciseType,
             }
           : a
       )
@@ -569,74 +568,82 @@ export default function RecordPage() {
         </div>
       )}
 
-      {/* Exercise Form Modal */}
-      {showExerciseForm && (
+      {/* ✅ Exercise Form Modal - แยกตาม PAM Level */}
+      {showExerciseForm && currentExerciseActivity && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
-
+            
             {/* แสดงเป้าหมาย */}
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-semibold">
-                🎯 เป้าหมาย: <strong>{currentExerciseActivity?.target_minutes || 30} นาที/วัน</strong>
+                🎯 เป้าหมาย: <strong>{currentExerciseActivity.target_minutes || 30} นาที/วัน</strong>
               </p>
             </div>
-
+            
             <div className="space-y-4">
-              {/* ประเภทการออกกำลังกาย */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">เลือกประเภทการออกกำลังกาย</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { value: 'walking', label: '🚶 เดิน' },
-                    { value: 'running', label: '🏃 วิ่ง' },
-                    { value: 'weightlifting', label: '🏋️ ยกน้ำหนัก' },
-                    { value: 'aerobic', label: '💃 แอโรบิค' },
-                    { value: 'yoga', label: '🧘 โยคะ, ชี่กง, ไทชิ' },
-                    { value: 'other', label: '📌 อื่นๆ' },
-                  ].map((option) => (
-                    <label
-                      key={option.value}
-                      className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                        selectedExerciseType === option.value ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="exerciseType"
-                        checked={selectedExerciseType === option.value}
-                        onChange={() => setSelectedExerciseType(option.value)}
-                        className="w-4 h-4 text-blue-500"
-                      />
-                      <span className="text-sm font-medium text-gray-700">{option.label}</span>
-                    </label>
-                  ))}
+              {/* ✅ สำหรับ L2/L3: แสดงเลือกประเภทการออกกำลังกาย */}
+              {profile?.pam_level !== 'L4' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">เลือกประเภทการออกกำลังกาย</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: 'walking', label: '🚶 เดิน' },
+                      { value: 'running', label: '🏃 วิ่ง' },
+                      { value: 'weightlifting', label: '🏋️ ยกน้ำหนัก' },
+                      { value: 'aerobic', label: '💃 แอโรบิค' },
+                      { value: 'yoga', label: '🧘 โยคะ, ชี่กง, ไทชิ' },
+                      { value: 'other', label: '📌 อื่นๆ' },
+                    ].map((option) => (
+                      <label
+                        key={option.value}
+                        className={`flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          selectedExerciseType === option.value ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="exerciseType"
+                          checked={selectedExerciseType === option.value}
+                          onChange={() => setSelectedExerciseType(option.value)}
+                          className="w-4 h-4 text-blue-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* เวลาออกกำลังกาย */}
+              )}
+              
+              {/* ✅ สำหรับทุก Level: กรอกเวลาออกกำลังกาย */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">⏱️ เวลาออกกำลังกาย (นาที)</label>
                 <input
                   type="number"
                   value={exerciseMinutes}
                   onChange={(e) => setExerciseMinutes(e.target.value)}
-                  placeholder={`เช่น ${currentExerciseActivity?.target_minutes || 30}`}
+                  placeholder={`เช่น ${currentExerciseActivity.target_minutes || 30}`}
                   className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min="5"
+                  min="1"
                   max="180"
-                  step="5"
+                  step="1"
+                  autoFocus
                 />
-                {/* แสดงเปรียบเทียบกับเป้าหมาย */}
+                {/* ✅ แสดงเปรียบเทียบกับเป้าหมาย (ป้องกัน NaN) */}
                 {exerciseMinutes && (
                   <div className="mt-2">
-                    {parseInt(exerciseMinutes) >= getTargetMinutes(currentExerciseActivity?.target_minutes) ? (
-                      <p className="text-sm text-green-600 font-semibold">✅ ทำได้ตามเป้าหมาย!</p>
-                    ) : (
-                      <p className="text-sm text-orange-600 font-semibold">
-                        ⚠️ ยังขาดอีก {getTargetMinutes(currentExerciseActivity?.target_minutes) - parseInt(exerciseMinutes)} นาที
-                      </p>
-                    )}
+                    {(() => {
+                      const targetMinutes = getTargetMinutes(currentExerciseActivity.target_minutes);
+                      const remaining = targetMinutes - parseInt(exerciseMinutes);
+                      
+                      return remaining >= 0 ? (
+                        <p className="text-sm text-green-600 font-semibold">✅ ทำได้ตามเป้าหมาย!</p>
+                      ) : (
+                        <p className="text-sm text-orange-600 font-semibold">
+                          ⚠️ ยังขาดอีก {Math.abs(remaining)} นาที
+                        </p>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -650,14 +657,14 @@ export default function RecordPage() {
                   setExerciseMinutes('');
                   setCurrentExerciseActivity(null);
                 }}
-                className="flex-1 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
+                className="flex-1 py-3 border border-gray-300 text-gray-700 font-semibold rounded-xl hover:bg-gray-50 transition-colors"
               >
                 ยกเลิก
               </button>
               <button
                 onClick={handleSaveExercise}
-                disabled={!selectedExerciseType || !exerciseMinutes}
-                className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!exerciseMinutes || parseInt(exerciseMinutes) <= 0}
+                className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
                 บันทึก
               </button>
@@ -733,14 +740,14 @@ function ActivitySection({
                   {activity.description_th && (
                     <p className="text-xs text-gray-500 mt-0.5">{activity.description_th}</p>
                   )}
-
+                  
                   {/* แสดงเป้าหมายนาทีออกกำลังกาย */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.target_minutes && (
                     <p className="text-xs text-blue-600 mt-1 font-medium">
                       🎯 เป้าหมาย: {activity.target_minutes} นาที/วัน
                     </p>
                   )}
-
+                  
                   {/* ✅ แสดงข้อมูลที่บันทึกแล้ว (แก้ไขแล้ว - ป้องกัน NaN) */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.is_completed && activity.exercise_minutes && (
                     <div className="mt-2 space-y-1">
@@ -761,7 +768,7 @@ function ActivitySection({
                       })()}
                     </div>
                   )}
-
+                  
                   {/* ความหวาน */}
                   {showSweetType && activity.activity_code === 'stop_sweet' && !activity.is_completed && (
                     <button
@@ -783,7 +790,7 @@ function ActivitySection({
                       </div>
                     </div>
                   )}
-
+                  
                   {/* น้ำหนักและน้ำตาล */}
                   {showValue && activity.activity_code === 'record_weight_sugar' && (
                     <button
