@@ -67,7 +67,6 @@ export default function RecordPage() {
       router.push('/login');
       return;
     }
-    
     setUser(userData);
     fetchData(userData);
   }, [router]);
@@ -76,28 +75,57 @@ export default function RecordPage() {
     try {
       const [profileData, activitiesData, recordsData] = await Promise.all([
         getProfile(userData.id),
-        getActivities(userData.pam_level || 'L2'),
+        getActivities(userData.pam_level || 'L2'), // ใช้ userData.pam_level ชั่วคราว
         getTodayRecords(userData.id)
       ]);
       
       setProfile(profileData);
       
-      const activitiesWithRecords = activitiesData.map((activity: any) => {
-        const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
-        return {
-          ...activity,
-          is_completed: existingRecord?.is_completed ?? false,
-          record_id: existingRecord?.id,
-          weight: existingRecord?.weight,
-          blood_sugar: existingRecord?.blood_sugar,
-          sweet_type: existingRecord?.sweet_type ?? [],
-          exercise_minutes: existingRecord?.exercise_minutes,
-          target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
-        };
-      });
-
-      setActivities(activitiesWithRecords);
-
+      // ✅ ใช้ profileData.pam_level แทน (ค่าจริงจากฐานข้อมูล)
+      const actualPamLevel = profileData?.pam_level || userData.pam_level || 'L2';
+      
+      console.log('📊 User PAM Level from session:', userData.pam_level);
+      console.log('📊 Actual PAM Level from database:', actualPamLevel);
+      
+      // ✅ ถ้า pam_level ไม่ตรงกัน ให้โหลด activities ใหม่
+      if (actualPamLevel !== userData.pam_level) {
+        console.log('⚠️ PAM Level mismatch! Reloading activities...');
+        const correctActivities = await getActivities(actualPamLevel);
+        
+        const activitiesWithRecords = correctActivities.map((activity: any) => {
+          const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
+          return {
+            ...activity,
+            is_completed: existingRecord?.is_completed ?? false,
+            record_id: existingRecord?.id,
+            weight: existingRecord?.weight,
+            blood_sugar: existingRecord?.blood_sugar,
+            sweet_type: existingRecord?.sweet_type ?? [],
+            exercise_minutes: existingRecord?.exercise_minutes,
+            target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
+          };
+        });
+        
+        setActivities(activitiesWithRecords);
+      } else {
+        // ใช้ข้อมูลเดิม
+        const activitiesWithRecords = activitiesData.map((activity: any) => {
+          const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
+          return {
+            ...activity,
+            is_completed: existingRecord?.is_completed ?? false,
+            record_id: existingRecord?.id,
+            weight: existingRecord?.weight,
+            blood_sugar: existingRecord?.blood_sugar,
+            sweet_type: existingRecord?.sweet_type ?? [],
+            exercise_minutes: existingRecord?.exercise_minutes,
+            target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
+          };
+        });
+        
+        setActivities(activitiesWithRecords);
+      }
+      
       // โหลดหมายเหตุรายวัน
       const noteData = await getDailyNote(userData.id);
       if (noteData?.note_text) {
@@ -130,7 +158,7 @@ export default function RecordPage() {
               setShowSweetForm(true);
               return { ...a, is_completed: true };
             }
-            if (newCompleted) {
+            if (newCompleted && user) {
               saveRecord({
                 user_id: user.id,
                 activity_id: id,
@@ -152,7 +180,7 @@ export default function RecordPage() {
           }
           
           // กิจกรรมทั่วไป
-          if (newCompleted) {
+          if (user && newCompleted) {
             saveRecord({
               user_id: user.id,
               activity_id: id,
@@ -294,6 +322,17 @@ export default function RecordPage() {
   const measurementActivities = activities.filter((a) => a.activity_type === 'measurement');
   const sleepActivities = activities.filter((a) => a.activity_type === 'rest');
 
+  // ✅ ฟังก์ชันแสดงชื่อระดับ
+  const getPamLevelName = (level: string) => {
+    switch(level) {
+      case 'L1': return 'Deny';
+      case 'L2': return 'General';
+      case 'L3': return 'Intensive';
+      case 'L4': return 'Champion';
+      default: return level;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -301,6 +340,8 @@ export default function RecordPage() {
       </div>
     );
   }
+
+  const actualPamLevel = profile?.pam_level || user?.pam_level || 'L2';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
@@ -311,8 +352,23 @@ export default function RecordPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-800">
-              กิจกรรมสำหรับนักกีฬา {profile?.pam_level === 'L4' ? 'Champion' : profile?.pam_level || 'L2'}
+              กิจกรรมสำหรับนักกีฬา {getPamLevelName(actualPamLevel)}
             </h1>
+            {/* ✅ แสดง PAM Level และ Zone */}
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">
+                {actualPamLevel}
+              </span>
+              {profile?.zone && (
+                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                  profile.zone === 'Green Zone' ? 'bg-green-100 text-green-700' :
+                  profile.zone === 'Yellow Zone' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  {profile.zone}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-gray-500 mt-1">
               {new Date().toLocaleDateString('th-TH', {
                 weekday: 'long',
