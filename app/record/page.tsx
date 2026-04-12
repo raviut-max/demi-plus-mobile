@@ -73,9 +73,9 @@ export default function RecordPage() {
   const fetchData = async () => {
     try {
       const [profileData, activitiesData, recordsData] = await Promise.all([
-        getProfile(user.id),
-        getActivities(user.pam_level || 'L2'),
-        getTodayRecords(user.id)
+        getProfile(user?.id),
+        getActivities(user?.pam_level || 'L2'),
+        getTodayRecords(user?.id)
       ]);
       
       setProfile(profileData);
@@ -97,7 +97,7 @@ export default function RecordPage() {
       setActivities(activitiesWithRecords);
       
       // โหลดหมายเหตุรายวัน
-      const noteData = await getDailyNote(user.id);
+      const noteData = await getDailyNote(user?.id);
       if (noteData?.note_text) {
         setDailyNote(noteData.note_text);
       }
@@ -109,6 +109,8 @@ export default function RecordPage() {
   };
 
   const toggleActivity = async (id: string) => {
+    if (!user) return;
+    
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
@@ -138,7 +140,7 @@ export default function RecordPage() {
             }
           }
           
-          // ✅ ออกกำลังกาย - เปิดฟอร์ม (เฉพาะ L4)
+          // ✅ ออกกำลังกาย - เปิดฟอร์ม พร้อมโหลดค่าเดิม
           if (a.activity_type === 'exercise' && newCompleted) {
             setCurrentExerciseActivity(a);
             // ✅ โหลดค่าเดิมที่เคยบันทึกไว้ หรือค่าเป้าหมาย
@@ -147,7 +149,7 @@ export default function RecordPage() {
             return { ...a, is_completed: false };
           }
           
-          // กิจกรรมทั่วไป (L2/L3)
+          // กิจกรรมทั่วไป
           if (user && newCompleted) {
             saveRecord({
               user_id: user.id,
@@ -694,11 +696,13 @@ function ActivitySection({
 }) {
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
+      {/* Header */}
       <div className={`flex items-center gap-2 px-4 py-3 ${headerBg}`}>
         <span className="text-xl" role="img" aria-label={title}>{icon}</span>
         <h2 className="text-base font-bold text-gray-800">{title}</h2>
       </div>
 
+      {/* Activities */}
       <div className="p-4 space-y-2">
         {activities.map((activity) => (
           <div key={activity.id} className="flex items-center justify-between px-4 py-4 border-b border-gray-100 last:border-b-0">
