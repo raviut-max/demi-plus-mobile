@@ -1,13 +1,32 @@
-// app/admin/progress/page.tsx
+// =====================================================
+// ไฟล์: app/progress/page.tsx
+// หน้าแสดงความคืบหน้าของผู้ป่วย (Progress Page)
+// =====================================================
+// ฟีเจอร์:
+// - แสดงกิจกรรมตาม PAM Level (L2/L3 = 5 ข้อ, L4 = 8 ข้อ)
+// - แสดงสถานะ PAM Level และ Zone
+// - แสดงความคืบหน้าแต่ละกิจกรรม (7 วันล่าสุด)
+// - แสดงสถิติการกินหวาน, น้ำหนัก, น้ำตาล
+// =====================================================
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { checkSession, getProfile, getActivities, getProgress, getWeeklyGoals } from '@/lib/supabase/queries';
+import { 
+  checkSession, 
+  getProfile, 
+  getActivities, 
+  getProgress, 
+  getWeeklyGoals 
+} from '@/lib/supabase/queries';
 import { StarBackground } from '@/components/star-background';
 import Image from 'next/image';
-import { CheckCircle, Trophy, TrendingUp } from 'lucide-react';
+import { CheckCircle, Trophy, TrendingUp, AlertCircle } from 'lucide-react';
 
+// =====================================================
+// Interfaces (ประเภทข้อมูล)
+// =====================================================
 interface Activity {
   id: string;
   activity_code: string;
@@ -52,6 +71,9 @@ interface ActivityStats {
   sweetTypeCounts: SweetTypeCount[];
 }
 
+// =====================================================
+// ตัวเลือกความหวาน (Sweet Options)
+// =====================================================
 const sweetOptions = [
   { value: 'ผลไม้หวาน', icon: '🍈' },
   { value: 'ปรุงเติมน้ำตาล', icon: '🍜' },
@@ -62,7 +84,24 @@ const sweetOptions = [
   { value: 'อื่นๆ', icon: '🍪' },
 ];
 
+// =====================================================
+// ฟังก์ชันแปลง PAM Level เป็นชื่อแสดง
+// =====================================================
+const getPamLevelName = (level: string): string => {
+  switch(level) {
+    case 'L1': return 'Deny';
+    case 'L2': return 'General';
+    case 'L3': return 'Intensive';
+    case 'L4': return 'Champion';
+    default: return level;
+  }
+};
+
+// =====================================================
+// Main Component
+// =====================================================
 export default function ProgressPage() {
+  // State สำหรับข้อมูลผู้ใช้และโปรไฟล์
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -70,8 +109,12 @@ export default function ProgressPage() {
   const [weeklyGoals, setWeeklyGoals] = useState<WeeklyGoal[]>([]);
   const [activityStats, setActivityStats] = useState<ActivityStats[]>([]);
   const [loading, setLoading] = useState(true);
+
   const router = useRouter();
 
+  // =====================================================
+  // โหลดข้อมูลเมื่อหน้าเพจเปิด
+  // =====================================================
   useEffect(() => {
     const userData = checkSession();
     if (!userData) {
@@ -79,55 +122,81 @@ export default function ProgressPage() {
       return;
     }
     setUser(userData);
-
-    const fetchData = async () => {
-      try {
-        const [profileData, activitiesData, recordsData, goalsData] = await Promise.all([
-          getProfile(userData.id),
-          getActivities(userData.pam_level || 'L2'),
-          getProgress(userData.id, 7),
-          getWeeklyGoals(userData.id)
-        ]);
-        
-        setProfile(profileData);
-        setActivities(activitiesData);
-        setRecords(recordsData);
-        setWeeklyGoals(goalsData);
-        
-        const stats = calculateActivityStats(activitiesData, recordsData, goalsData);
-        setActivityStats(stats);
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    fetchData(userData);
   }, [router]);
 
-  const calculateActivityStats = (activities: Activity[], records: RecordData[], goals: WeeklyGoal[]): ActivityStats[] => {
+  // =====================================================
+  // ฟังก์ชันโหลดข้อมูลทั้งหมด
+  // =====================================================
+  const fetchData = async (userData: any) => {
+    try {
+      // ✅ โหลดโปรไฟล์จากฐานข้อมูล (ได้ PAM Level จริง)
+      const profileData = await getProfile(userData.id);
+      setProfile(profileData);
+
+      // ✅ ใช้ PAM Level จากฐานข้อมูล (ไม่ใช่จาก localStorage)
+      const actualPamLevel = profileData?.pam_level || userData.pam_level || 'L2';
+      console.log('📊 Actual PAM Level from database:', actualPamLevel);
+
+      // ✅ โหลดกิจกรรมตาม PAM Level ที่ถูกต้อง
+      const activitiesData = await getActivities(actualPamLevel);
+      setActivities(activitiesData);
+
+      // ✅ โหลดบันทึก 7 วันล่าสุด
+      const recordsData = await getProgress(userData.id, 7);
+      setRecords(recordsData);
+
+      // ✅ โหลดเป้าหมายรายสัปดาห์
+      const goalsData = await getWeeklyGoals(userData.id);
+      setWeeklyGoals(goalsData);
+
+      // ✅ คำนวณสถิติ
+      const stats = calculateActivityStats(activitiesData, recordsData, goalsData);
+      setActivityStats(stats);
+
+      console.log('✅ Progress data loaded successfully');
+      console.log('📋 Activities count:', activitiesData.length);
+    } catch (error) {
+      console.error('❌ Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =====================================================
+  // คำนวณสถิติแต่ละกิจกรรม
+  // =====================================================
+  const calculateActivityStats = (
+    activities: Activity[], 
+    records: RecordData[], 
+    goals: WeeklyGoal[]
+  ): ActivityStats[] => {
     const stats: ActivityStats[] = [];
-    
+
     activities.forEach(activity => {
+      // กรองบันทึกของกิจกรรมนี้
       const activityRecords = records.filter(r => r.activity_id === activity.id);
-      const uniqueDates = [...new Set(activityRecords.map(r => r.record_date))];
       const completedDays = activityRecords.filter(r => r.is_completed).length;
       
+      // หาเป้าหมาย
       const goal = goals.find(g => g.activity_id === activity.id);
       const targetDays = goal?.target_days || 7;
       
+      // คำนวณเปอร์เซ็นต์
       const percentage = targetDays > 0 ? Math.round((completedDays / targetDays) * 100) : 0;
       
+      // กำหนดสถานะ
       let status: 'เก่ง' | 'ดี' | 'ต้องปรับปรุง' = 'ต้องปรับปรุง';
       if (percentage >= 80) status = 'เก่ง';
       else if (percentage >= 50) status = 'ดี';
 
+      // หาค่าล่าสุด (น้ำหนัก, น้ำตาล)
       const sortedRecords = activityRecords.sort((a, b) => 
         new Date(b.record_date).getTime() - new Date(a.record_date).getTime()
       );
       const latestRecord = sortedRecords[0];
       
+      // นับประเภทความหวาน
       const sweetTypeMap = new Map<string, number>();
       activityRecords.forEach(r => {
         if (r.sweet_type && Array.isArray(r.sweet_type)) {
@@ -164,6 +233,9 @@ export default function ProgressPage() {
     return stats.sort((a, b) => a.activity.sort_order - b.activity.sort_order);
   };
 
+  // =====================================================
+  // ฟังก์ชันแสดงสีตามสถานะ
+  // =====================================================
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'เก่ง':
@@ -175,61 +247,96 @@ export default function ProgressPage() {
     }
   };
 
+  // =====================================================
+  // ฟังก์ชันแสดงไอคอนตามสถานะ
+  // =====================================================
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'เก่ง':
         return <CheckCircle className="w-4 h-4" />;
       case 'ดี':
-        return <CheckCircle className="w-4 h-4" />;
-      default:
         return <TrendingUp className="w-4 h-4" />;
+      default:
+        return <AlertCircle className="w-4 h-4" />;
     }
   };
 
+  // =====================================================
+  // ฟังก์ชันแสดงสี Progress Bar
+  // =====================================================
   const getProgressBarColor = (percentage: number) => {
     if (percentage >= 80) return 'from-green-500 to-emerald-500';
     if (percentage >= 50) return 'from-green-400 to-lime-400';
     return 'from-green-300 to-teal-300';
   };
 
+  // =====================================================
+  // แสดงหน้า Loading
+  // =====================================================
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">กำลังโหลด...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
+  // =====================================================
+  // แยกกิจกรรมตามประเภท
+  // =====================================================
   const foodStats = activityStats.filter(s => s.activity.activity_type === 'food');
   const exerciseStats = activityStats.filter(s => s.activity.activity_type === 'exercise');
   const measurementStats = activityStats.filter(s => s.activity.activity_type === 'measurement');
   const restStats = activityStats.filter(s => s.activity.activity_type === 'rest');
 
+  // =====================================================
+  // แสดงผลหน้าเพจ
+  // =====================================================
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
       <StarBackground />
-      
+
       <div className="max-w-md mx-auto px-4 py-6">
-        {/* Header */}
+        
+        {/* =====================================================
+            Header - แสดงชื่อผู้ป่วย, PAM Level, Zone
+            ===================================================== */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-800">
               {profile?.full_name || 'ผู้ใช้'}
             </h1>
+            
+            {/* ✅ แสดง PAM Level และ Zone (แก้ไขใหม่) */}
             <div className="flex items-center gap-2 mt-1">
+              {/* PAM Level Badge */}
+              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                profile?.pam_level === 'L4' ? 'bg-green-100 text-green-700' :
+                profile?.pam_level === 'L3' ? 'bg-blue-100 text-blue-700' :
+                profile?.pam_level === 'L2' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {profile?.pam_level || 'L2'}
+              </span>
+              
+              {/* PAM Level Name */}
+              <span className="text-sm font-semibold text-gray-700">
+                {getPamLevelName(profile?.pam_level || 'L2')}
+              </span>
+              
+              {/* Champion Icon (เฉพาะ L4) */}
               {profile?.pam_level === 'L4' && (
                 <Trophy className="w-4 h-4 text-yellow-600" />
               )}
-              <p className="text-sm font-semibold text-gray-700">
-                {profile?.pam_level === 'L4' ? 'Champion' : profile?.pam_level || 'L2'} 
-                {' • '} 
+              
+              {/* Step */}
+              <span className="text-xs text-gray-500">•</span>
+              <span className="text-xs text-gray-600">
                 {profile?.current_step || 'Starter'}
-              </p>
+              </span>
             </div>
           </div>
+          
           <Image
             src="/images/mascot-main.png"
             alt="Mascot"
@@ -239,13 +346,15 @@ export default function ProgressPage() {
           />
         </div>
 
-        {/* L2: 5 Golden Rules */}
-        {profile?.pam_level === 'L2' && (
+        {/* =====================================================
+            L2/L3: กฎทอง 5 ข้อ
+            ===================================================== */}
+        {(profile?.pam_level === 'L2' || profile?.pam_level === 'L3') && (
           <div className="space-y-3">
-            {/* Food Section */}
+            
+            {/* อาหาร Section */}
             {foodStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - เขียวอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#ECFDF5]">
                   <span className="text-xl">🍚</span>
                   <h2 className="text-base font-bold text-gray-800">อาหาร</h2>
@@ -277,9 +386,10 @@ export default function ProgressPage() {
                         />
                       </div>
 
+                      {/* แสดงความหวาน */}
                       {stat.activity.activity_code === 'stop_sweet' && stat.sweetTypeCounts && stat.sweetTypeCounts.length > 0 && (
                         <div className="mt-2">
-                          <p className="text-xs text-gray-500 mb-1">กิน:</p>
+                          <p className="text-xs text-gray-500 mb-1">กิน: </p>
                           <div className="flex flex-wrap gap-1">
                             {stat.sweetTypeCounts.map((item, idx) => (
                               <span
@@ -293,6 +403,7 @@ export default function ProgressPage() {
                         </div>
                       )}
 
+                      {/* แสดงน้ำหนักและน้ำตาล */}
                       {stat.activity.activity_code === 'record_weight_sugar' && (
                         <div className="mt-2 flex gap-3">
                           {stat.latestWeight && (
@@ -321,10 +432,9 @@ export default function ProgressPage() {
               </div>
             )}
 
-            {/* Exercise Section */}
+            {/* ออกกำลังกาย Section */}
             {exerciseStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - ฟ้าอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#EFF6FF]">
                   <span className="text-xl">🧘</span>
                   <h2 className="text-base font-bold text-gray-800">ออกกำลังกาย</h2>
@@ -361,10 +471,9 @@ export default function ProgressPage() {
               </div>
             )}
 
-            {/* Measurement Section */}
+            {/* วัดและบันทึก Section */}
             {measurementStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - ชมพูอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#FDF4FF]">
                   <span className="text-xl">📊</span>
                   <h2 className="text-base font-bold text-gray-800">วัดและบันทึก</h2>
@@ -421,10 +530,9 @@ export default function ProgressPage() {
               </div>
             )}
 
-            {/* Rest Section */}
+            {/* พักผ่อน Section */}
             {restStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - ม่วงอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#EDE9FE]">
                   <span className="text-xl">🌙</span>
                   <h2 className="text-base font-bold text-gray-800">พักผ่อน</h2>
@@ -460,87 +568,15 @@ export default function ProgressPage() {
           </div>
         )}
 
-        {/* L3: Intensive */}
-        {profile?.pam_level === 'L3' && (
-          <div className="space-y-3">
-            {activityStats.map((stat, index) => (
-              <div
-                key={index}
-                className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-gray-800">{stat.activity.activity_name_th}</p>
-                    {stat.activity.description_th && (
-                      <p className="text-xs text-gray-500 mt-0.5">{stat.activity.description_th}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      {stat.completedDays}/{stat.targetDays} วัน - {stat.percentage}%
-                    </p>
-                  </div>
-                  <div className={`flex items-center gap-1 px-3 py-1.5 rounded-full border text-xs font-semibold ${getStatusColor(stat.status)}`}>
-                    {getStatusIcon(stat.status)}
-                    {stat.status}
-                  </div>
-                </div>
-
-                <div className="h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full bg-gradient-to-r ${getProgressBarColor(stat.percentage)} transition-all`}
-                    style={{ width: `${stat.percentage}%` }}
-                  />
-                </div>
-
-                {stat.activity.activity_code === 'stop_sweet' && stat.sweetTypeCounts && stat.sweetTypeCounts.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs text-gray-500 mb-1">กิน:</p>
-                    <div className="flex flex-wrap gap-1">
-                      {stat.sweetTypeCounts.map((item, idx) => (
-                        <span
-                          key={idx}
-                          className="inline-flex items-center gap-1 bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full"
-                        >
-                          {item.icon} {item.sweetType} {item.count} ครั้ง
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {stat.activity.activity_code === 'record_weight_sugar' && (
-                  <div className="mt-2 flex gap-3">
-                    {stat.latestWeight && (
-                      <div className="flex items-center gap-2 bg-purple-50 px-3 py-2 rounded-lg">
-                        <span className="text-sm">⚖️</span>
-                        <div>
-                          <p className="text-[10px] text-gray-500">น้ำหนัก</p>
-                          <p className="text-sm font-bold text-purple-700">{stat.latestWeight.toFixed(1)} kg</p>
-                        </div>
-                      </div>
-                    )}
-                    {stat.latestBloodSugar && (
-                      <div className="flex items-center gap-2 bg-red-50 px-3 py-2 rounded-lg">
-                        <span className="text-sm">💉</span>
-                        <div>
-                          <p className="text-[10px] text-gray-500">น้ำตาล</p>
-                          <p className="text-sm font-bold text-red-700">{stat.latestBloodSugar.toFixed(0)} mg/dL</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* L4: Champion Dashboard */}
+        {/* =====================================================
+            L4: แชมป์ 8 กิจกรรม
+            ===================================================== */}
         {profile?.pam_level === 'L4' && (
           <div className="space-y-3">
-            {/* อาหาร Section */}
+            
+            {/* อาหาร Section (3 ข้อ) */}
             {foodStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - เขียวอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#ECFDF5]">
                   <span className="text-xl">🍚</span>
                   <h2 className="text-base font-bold text-gray-800">อาหาร</h2>
@@ -578,10 +614,9 @@ export default function ProgressPage() {
               </div>
             )}
 
-            {/* ออกกำลังกาย Section */}
+            {/* ออกกำลังกาย Section (4 ข้อ) */}
             {exerciseStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - ฟ้าอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#EFF6FF]">
                   <span className="text-xl">🧘</span>
                   <h2 className="text-base font-bold text-gray-800">ออกกำลังกาย</h2>
@@ -616,10 +651,9 @@ export default function ProgressPage() {
               </div>
             )}
 
-            {/* นอนหลับ Section */}
+            {/* นอนหลับ Section (1 ข้อ) */}
             {restStats.length > 0 && (
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-                {/* ✅ แถบสีหัวข้อ - ม่วงอ่อน */}
                 <div className="flex items-center gap-2 px-4 py-3 bg-[#EDE9FE]">
                   <span className="text-xl">🌙</span>
                   <h2 className="text-base font-bold text-gray-800">พักผ่อน</h2>
