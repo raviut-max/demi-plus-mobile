@@ -68,19 +68,27 @@ export default function RecordPage() {
       return;
     }
     setUser(userData);
-    fetchData();
+    fetchData(userData);
   }, [router]);
 
-  const fetchData = async () => {
+  // ✅ แก้ไข: รับ userData และโหลด PAM จากฐานข้อมูล
+  const fetchData = async (userData: any) => {
     try {
-      const [profileData, activitiesData, recordsData] = await Promise.all([
-        getProfile(user?.id),
-        getActivities(user?.pam_level || 'L2'),
-        getTodayRecords(user?.id)
-      ]);
-
+      console.log('📊 Fetching data for user:', userData.id);
+      console.log('📊 User PAM Level from session:', userData.pam_level);
+      
+      // ✅ 1. โหลด Profile จากฐานข้อมูล (ได้ PAM Level จริง)
+      const profileData = await getProfile(userData.id);
       setProfile(profileData);
-
+      
+      // ✅ 2. ใช้ PAM Level จากฐานข้อมูล (ไม่ใช่จาก localStorage)
+      const actualPamLevel = profileData?.pam_level || 'L2';
+      console.log('📊 Actual PAM Level from database:', actualPamLevel);
+      
+      // ✅ 3. โหลด Activities ตาม PAM Level จากฐานข้อมูล
+      const activitiesData = await getActivities(actualPamLevel);
+      const recordsData = await getTodayRecords(userData.id);
+      
       const activitiesWithRecords = activitiesData.map((activity: any) => {
         const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
         return {
@@ -96,9 +104,10 @@ export default function RecordPage() {
       });
 
       setActivities(activitiesWithRecords);
+      console.log('✅ Loaded', activitiesWithRecords.length, 'activities');
 
       // โหลดหมายเหตุรายวัน
-      const noteData = await getDailyNote(user?.id);
+      const noteData = await getDailyNote(userData.id);
       if (noteData?.note_text) {
         setDailyNote(noteData.note_text);
       }
@@ -109,7 +118,26 @@ export default function RecordPage() {
     }
   };
 
+  // ✅ ฟังก์ชันแยกค่าเป้าหมาย (กรณีเป็นช่วง เช่น "20-30")
+  const getTargetMinutes = (targetValue: string | number | null | undefined): number => {
+    if (!targetValue) return 30; // ค่า default
+    
+    const targetStr = targetValue.toString();
+    
+    // ✅ ตรวจสอบว่าเป็นช่วงหรือไม่ (เช่น "20-30")
+    if (targetStr.includes('-')) {
+      const parts = targetStr.split('-');
+      // ✅ ใช้ค่าสูงสุด (ตัวหลัง)
+      return parseInt(parts[1].trim()) || 30;
+    }
+    
+    // ✅ ถ้าเป็นตัวเลขปกติ
+    return parseInt(targetStr) || 30;
+  };
+
   const toggleActivity = async (id: string) => {
+    if (!user) return;
+    
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
@@ -361,6 +389,7 @@ export default function RecordPage() {
                 hiit: '🔥'
               }}
               showExerciseInfo={true}
+              getTargetMinutes={getTargetMinutes}
             />
           </div>
         )}
@@ -545,14 +574,14 @@ export default function RecordPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
-            
+
             {/* แสดงเป้าหมาย */}
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-semibold">
                 🎯 เป้าหมาย: <strong>{currentExerciseActivity?.target_minutes || 30} นาที/วัน</strong>
               </p>
             </div>
-            
+
             <div className="space-y-4">
               {/* ประเภทการออกกำลังกาย */}
               <div>
@@ -601,11 +630,11 @@ export default function RecordPage() {
                 {/* แสดงเปรียบเทียบกับเป้าหมาย */}
                 {exerciseMinutes && (
                   <div className="mt-2">
-                    {parseInt(exerciseMinutes) >= (currentExerciseActivity?.target_minutes || 30) ? (
+                    {parseInt(exerciseMinutes) >= getTargetMinutes(currentExerciseActivity?.target_minutes) ? (
                       <p className="text-sm text-green-600 font-semibold">✅ ทำได้ตามเป้าหมาย!</p>
                     ) : (
                       <p className="text-sm text-orange-600 font-semibold">
-                        ⚠️ ยังขาดอีก {(currentExerciseActivity?.target_minutes || 30) - parseInt(exerciseMinutes)} นาที
+                        ⚠️ ยังขาดอีก {getTargetMinutes(currentExerciseActivity?.target_minutes) - parseInt(exerciseMinutes)} นาที
                       </p>
                     )}
                   </div>
@@ -640,25 +669,6 @@ export default function RecordPage() {
   );
 }
 
-// =====================================================
-// ✅ ฟังก์ชันแยกค่าเป้าหมาย (กรณีเป็นช่วง เช่น "20-30")
-// =====================================================
-function getTargetMinutes(targetValue: string | number | null | undefined): number {
-  if (!targetValue) return 30; // ค่า default
-  
-  const targetStr = targetValue.toString();
-  
-  // ✅ ตรวจสอบว่าเป็นช่วงหรือไม่ (เช่น "20-30")
-  if (targetStr.includes('-')) {
-    const parts = targetStr.split('-');
-    // ✅ ใช้ค่าสูงสุด (ตัวหลัง)
-    return parseInt(parts[1].trim()) || 30;
-  }
-  
-  // ✅ ถ้าเป็นตัวเลขปกติ
-  return parseInt(targetStr) || 30;
-}
-
 // Activity Section Component
 function ActivitySection({
   title,
@@ -672,6 +682,7 @@ function ActivitySection({
   showValue = false,
   showSweetType = false,
   showExerciseInfo = false,
+  getTargetMinutes,
 }: {
   title: string;
   icon: string;
@@ -684,7 +695,22 @@ function ActivitySection({
   showValue?: boolean;
   showSweetType?: boolean;
   showExerciseInfo?: boolean;
+  getTargetMinutes?: (targetValue: string | number | null | undefined) => number;
 }) {
+  // ✅ ฟังก์ชันแยกค่าเป้าหมาย (กรณีเป็นช่วง เช่น "20-30")
+  const getTargetValue = (targetValue: string | number | null | undefined): number => {
+    if (!targetValue) return 30;
+    
+    const targetStr = targetValue.toString();
+    
+    if (targetStr.includes('-')) {
+      const parts = targetStr.split('-');
+      return parseInt(parts[1].trim()) || 30;
+    }
+    
+    return parseInt(targetStr) || 30;
+  };
+
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
       {/* Header */}
@@ -707,14 +733,14 @@ function ActivitySection({
                   {activity.description_th && (
                     <p className="text-xs text-gray-500 mt-0.5">{activity.description_th}</p>
                   )}
-                  
+
                   {/* แสดงเป้าหมายนาทีออกกำลังกาย */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.target_minutes && (
                     <p className="text-xs text-blue-600 mt-1 font-medium">
                       🎯 เป้าหมาย: {activity.target_minutes} นาที/วัน
                     </p>
                   )}
-                  
+
                   {/* ✅ แสดงข้อมูลที่บันทึกแล้ว (แก้ไขแล้ว - ป้องกัน NaN) */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.is_completed && activity.exercise_minutes && (
                     <div className="mt-2 space-y-1">
@@ -722,7 +748,7 @@ function ActivitySection({
                         ⏱️ ทำได้: {activity.exercise_minutes} นาที
                       </p>
                       {(() => {
-                        const targetMinutes = getTargetMinutes(activity.target_minutes);
+                        const targetMinutes = getTargetMinutes ? getTargetMinutes(activity.target_minutes) : getTargetValue(activity.target_minutes);
                         const remaining = targetMinutes - (activity.exercise_minutes || 0);
                         
                         return remaining >= 0 ? (
@@ -735,7 +761,7 @@ function ActivitySection({
                       })()}
                     </div>
                   )}
-                  
+
                   {/* ความหวาน */}
                   {showSweetType && activity.activity_code === 'stop_sweet' && !activity.is_completed && (
                     <button
@@ -757,7 +783,7 @@ function ActivitySection({
                       </div>
                     </div>
                   )}
-                  
+
                   {/* น้ำหนักและน้ำตาล */}
                   {showValue && activity.activity_code === 'record_weight_sugar' && (
                     <button
