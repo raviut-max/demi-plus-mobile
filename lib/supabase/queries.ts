@@ -79,21 +79,48 @@ export async function getProfile(userId: string) {
 }
 
 // =====================================================
-// Activities
+// ฟังก์ชันดึงกิจกรรมตาม PAM Level
 // =====================================================
 export async function getActivities(pamLevel: string) {
+  // ✅ เพิ่ม logging แบบละเอียด
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🎯 [getActivities] START');
+  console.log('🎯 [getActivities] Input pamLevel:', pamLevel);
+  console.log('🎯 [getActivities] Query: pam_level.eq.' + pamLevel + ' OR pam_level.eq.ALL');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  
   const { data, error } = await supabase
     .from('activities')
     .select('*')
     .or(`pam_level.eq.${pamLevel},pam_level.eq.ALL`)
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
-
+  
   if (error) {
-    console.error('Error fetching activities:', error);
+    console.error('❌ [getActivities] Error:', error);
+    console.error('❌ [getActivities] Error details:', JSON.stringify(error, null, 2));
     return [];
   }
-
+  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('✅ [getActivities] SUCCESS');
+  console.log('✅ [getActivities] Found:', data?.length, 'activities');
+  
+  if (data && data.length > 0) {
+    console.log('📋 [getActivities] Activity details:');
+    data.forEach((activity, index) => {
+      console.log(`  ${index + 1}. ${activity.activity_code} (${activity.activity_name_th}) - Level: ${activity.pam_level}`);
+    });
+    
+    console.log('📋 [getActivities] Activity codes:', data.map(a => a.activity_code));
+    console.log('📋 [getActivities] Activity types:', [...new Set(data.map(a => a.activity_type))]);
+  } else {
+    console.warn('⚠️ [getActivities] No activities found!');
+    console.warn('⚠️ [getActivities] Check if activities exist for pamLevel:', pamLevel);
+  }
+  
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  
   return data || [];
 }
 

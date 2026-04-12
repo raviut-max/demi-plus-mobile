@@ -39,23 +39,23 @@ export default function RecordPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
-  
+
   // Modal States
   const [showWeightForm, setShowWeightForm] = useState(false);
   const [showSweetForm, setShowSweetForm] = useState(false);
   const [showExerciseForm, setShowExerciseForm] = useState(false);
-  
+
   // Form States
   const [selectedSweets, setSelectedSweets] = useState<string[]>([]);
   const [weight, setWeight] = useState('');
   const [bloodSugar, setBloodSugar] = useState('');
-  
+
   // Exercise Form States
   const [selectedExerciseType, setSelectedExerciseType] = useState('');
   const [exerciseMinutes, setExerciseMinutes] = useState('');
   const [currentExerciseActivity, setCurrentExerciseActivity] = useState<Activity | null>(null);
-  
-  // ✅ Daily Note States (ใหม่)
+
+  // Daily Note States
   const [dailyNote, setDailyNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
 
@@ -67,60 +67,61 @@ export default function RecordPage() {
       router.push('/login');
       return;
     }
+
     setUser(userData);
-
-    const fetchData = async () => {
-      try {
-        const [profileData, activitiesData, recordsData] = await Promise.all([
-          getProfile(userData.id),
-          getActivities(userData.pam_level || 'L2'),
-          getTodayRecords(userData.id)
-        ]);
-        
-        setProfile(profileData);
-        
-        const activitiesWithRecords = activitiesData.map((activity: any) => {
-          const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
-          return {
-            ...activity,
-            is_completed: existingRecord?.is_completed ?? false,
-            record_id: existingRecord?.id,
-            weight: existingRecord?.weight,
-            blood_sugar: existingRecord?.blood_sugar,
-            sweet_type: existingRecord?.sweet_type ?? [],
-            exercise_minutes: existingRecord?.exercise_minutes,
-            target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
-          };
-        });
-        setActivities(activitiesWithRecords);
-        
-        // ✅ โหลดหมายเหตุรายวัน
-        const noteData = await getDailyNote(userData.id);
-        if (noteData?.note_text) {
-          setDailyNote(noteData.note_text);
-        }
-      } catch (error) {
-        console.error('Error fetching data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, [router]);
+
+  const fetchData = async () => {
+    try {
+      const [profileData, activitiesData, recordsData] = await Promise.all([
+        getProfile(user.id),
+        getActivities(user.pam_level || 'L2'),
+        getTodayRecords(user.id)
+      ]);
+
+      setProfile(profileData);
+
+      const activitiesWithRecords = activitiesData.map((activity: any) => {
+        const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
+        return {
+          ...activity,
+          is_completed: existingRecord?.is_completed ?? false,
+          record_id: existingRecord?.id,
+          weight: existingRecord?.weight,
+          blood_sugar: existingRecord?.blood_sugar,
+          sweet_type: existingRecord?.sweet_type ?? [],
+          exercise_minutes: existingRecord?.exercise_minutes,
+          target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
+        };
+      });
+
+      setActivities(activitiesWithRecords);
+
+      // โหลดหมายเหตุรายวัน
+      const noteData = await getDailyNote(user.id);
+      if (noteData?.note_text) {
+        setDailyNote(noteData.note_text);
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleActivity = async (id: string) => {
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
           const newCompleted = !a.is_completed;
-          
+
           // น้ำหนักและน้ำตาล
           if (a.activity_code === 'record_weight_sugar' && newCompleted) {
             setShowWeightForm(true);
             return { ...a, is_completed: false };
           }
-          
+
           // ความหวาน
           if (a.activity_code === 'stop_sweet') {
             if (!newCompleted) {
@@ -138,7 +139,7 @@ export default function RecordPage() {
               return { ...a, is_completed: true, sweet_type: [] };
             }
           }
-          
+
           // ออกกำลังกาย - เปิดฟอร์ม
           if (a.activity_type === 'exercise' && newCompleted) {
             setCurrentExerciseActivity(a);
@@ -147,7 +148,7 @@ export default function RecordPage() {
             setShowExerciseForm(true);
             return { ...a, is_completed: false };
           }
-          
+
           // กิจกรรมทั่วไป
           if (user && newCompleted) {
             saveRecord({
@@ -157,7 +158,7 @@ export default function RecordPage() {
               is_completed: true,
             });
           }
-          
+
           return { ...a, is_completed: newCompleted };
         }
         return a;
@@ -172,9 +173,10 @@ export default function RecordPage() {
 
   const handleSaveSweet = async () => {
     if (selectedSweets.length === 0 || !user) return;
+
     const sweetActivity = activities.find(a => a.activity_code === 'stop_sweet');
     if (!sweetActivity) return;
-    
+
     await saveRecord({
       user_id: user.id,
       activity_id: sweetActivity.id,
@@ -182,13 +184,13 @@ export default function RecordPage() {
       is_completed: false,
       sweet_type: selectedSweets,
     });
-    
+
     setActivities((prev) =>
       prev.map((a) =>
         a.id === sweetActivity.id ? { ...a, is_completed: false, sweet_type: selectedSweets } : a
       )
     );
-    
+
     setShowSweetForm(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -202,9 +204,10 @@ export default function RecordPage() {
 
   const handleSaveWeight = async () => {
     if (!weight || !bloodSugar || !user) return;
+
     const weightActivity = activities.find(a => a.activity_code === 'record_weight_sugar');
     if (!weightActivity) return;
-    
+
     await saveRecord({
       user_id: user.id,
       activity_id: weightActivity.id,
@@ -213,7 +216,7 @@ export default function RecordPage() {
       weight: parseFloat(weight),
       blood_sugar: parseFloat(bloodSugar),
     });
-    
+
     setActivities((prev) =>
       prev.map((a) =>
         a.id === weightActivity.id
@@ -221,16 +224,15 @@ export default function RecordPage() {
           : a
       )
     );
-    
+
     setShowWeightForm(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
-  // ฟังก์ชันบันทึกการออกกำลังกาย
   const handleSaveExercise = async () => {
     if (!selectedExerciseType || !exerciseMinutes || !user || !currentExerciseActivity) return;
-    
+
     await saveRecord({
       user_id: user.id,
       activity_id: currentExerciseActivity.id,
@@ -238,20 +240,20 @@ export default function RecordPage() {
       is_completed: true,
       exercise_minutes: parseInt(exerciseMinutes),
     });
-    
+
     setActivities((prev) =>
       prev.map((a) =>
         a.id === currentExerciseActivity.id
-          ? { 
-              ...a, 
-              is_completed: true, 
+          ? {
+              ...a,
+              is_completed: true,
               exercise_minutes: parseInt(exerciseMinutes),
               exercise_type: selectedExerciseType,
             }
           : a
       )
     );
-    
+
     setShowExerciseForm(false);
     setSelectedExerciseType('');
     setExerciseMinutes('');
@@ -260,19 +262,18 @@ export default function RecordPage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  // ✅ ฟังก์ชันบันทึกหมายเหตุรายวัน
   const handleSaveDailyNote = async () => {
     if (!user || !dailyNote.trim()) return;
-    
+
     setSavingNote(true);
-    
+
     try {
       await saveDailyNote({
         user_id: user.id,
         note_date: new Date().toISOString().split('T')[0],
         note_text: dailyNote.trim(),
       });
-      
+
       alert('✅ บันทึกหมายเหตุเรียบร้อยแล้ว');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -296,8 +297,8 @@ export default function RecordPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50">
-        <p className="text-gray-600">กำลังโหลด...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -305,7 +306,7 @@ export default function RecordPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
       <StarBackground />
-      
+
       {/* Header */}
       <div className="relative z-10 max-w-md mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
@@ -335,7 +336,14 @@ export default function RecordPage() {
               onToggle={toggleActivity}
               onOpenSweetForm={handleOpenSweetForm}
               headerBg="bg-[#ECFDF5]"
-              iconMap={{ stop_sweet: '🚫🍬', reduce_rice: '🍚', protein_vegetable: '🥦🍖', carb_control: '🍚', protein_intake: '🥩', water_intake: '💧' }}
+              iconMap={{
+                stop_sweet: '🚫🍬',
+                reduce_rice: '🍚',
+                protein_vegetable: '🥦🍖',
+                carb_control: '🍚',
+                protein_intake: '🥩',
+                water_intake: '💧'
+              }}
               showSweetType={true}
             />
           </div>
@@ -350,7 +358,13 @@ export default function RecordPage() {
               activities={exerciseActivities}
               onToggle={toggleActivity}
               headerBg="bg-[#EFF6FF]"
-              iconMap={{ exercise_walk: '🚶', stretching: '🧘', cardio: '🏃', strengthening: '🏋️', hiit: '🔥' }}
+              iconMap={{
+                exercise_walk: '🚶',
+                stretching: '🧘',
+                cardio: '🏃',
+                strengthening: '🏋️',
+                hiit: '🔥'
+              }}
               showExerciseInfo={true}
             />
           </div>
@@ -386,7 +400,7 @@ export default function RecordPage() {
           </div>
         )}
 
-        {/* ✅ หมายเหตุรายวัน (ใหม่) */}
+        {/* หมายเหตุรายวัน */}
         <div className="mb-6">
           <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 p-4">
             <h3 className="text-base font-bold text-gray-800 mb-3 flex items-center gap-2">
@@ -536,14 +550,14 @@ export default function RecordPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
-            
+
             {/* แสดงเป้าหมาย */}
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-blue-800 font-semibold">
                 🎯 เป้าหมาย: <strong>{currentExerciseActivity?.target_minutes || 30} นาที/วัน</strong>
               </p>
             </div>
-            
+
             <div className="space-y-4">
               {/* ประเภทการออกกำลังกาย */}
               <div>
@@ -661,7 +675,9 @@ function ActivitySection({
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
       {/* Header */}
       <div className={`flex items-center gap-2 px-4 py-3 ${headerBg}`}>
-        <span className="text-xl" role="img" aria-label={title}>{icon}</span>
+        <span className="text-xl" role="img" aria-label={title}>
+          {icon}
+        </span>
         <h2 className="text-base font-bold text-gray-800">{title}</h2>
       </div>
 
@@ -679,14 +695,14 @@ function ActivitySection({
                   {activity.description_th && (
                     <p className="text-xs text-gray-500 mt-0.5">{activity.description_th}</p>
                   )}
-                  
+
                   {/* แสดงเป้าหมายนาทีออกกำลังกาย */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.target_minutes && (
                     <p className="text-xs text-blue-600 mt-1 font-medium">
                       🎯 เป้าหมาย: {activity.target_minutes} นาที/วัน
                     </p>
                   )}
-                  
+
                   {/* แสดงข้อมูลที่บันทึกแล้ว */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.is_completed && activity.exercise_minutes && (
                     <div className="mt-2 space-y-1">
@@ -702,7 +718,7 @@ function ActivitySection({
                       )}
                     </div>
                   )}
-                  
+
                   {/* ความหวาน */}
                   {showSweetType && activity.activity_code === 'stop_sweet' && !activity.is_completed && (
                     <button
@@ -714,7 +730,7 @@ function ActivitySection({
                   )}
                   {showSweetType && activity.activity_code === 'stop_sweet' && !activity.is_completed && activity.sweet_type && activity.sweet_type.length > 0 && (
                     <div className="mt-2">
-                      <p className="text-xs text-gray-500 mb-1">กิน:</p>
+                      <p className="text-xs text-gray-500 mb-1">กิน: </p>
                       <div className="flex flex-wrap gap-1">
                         {activity.sweet_type.map((sweet: string, index: number) => (
                           <span key={index} className="inline-block bg-red-100 text-red-700 text-xs px-2 py-1 rounded-full mr-1 mb-1">
@@ -724,7 +740,7 @@ function ActivitySection({
                       </div>
                     </div>
                   )}
-                  
+
                   {/* น้ำหนักและน้ำตาล */}
                   {showValue && activity.activity_code === 'record_weight_sugar' && (
                     <button
@@ -784,10 +800,10 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: () =>
         }`}
       />
       {!checked && (
-        <span className="absolute left-1.5 text-[10px] font-medium text-gray-500">ไม่ทำ</span>
+        <span className="absolute left-1 text-[10px] font-bold text-gray-500">ไม่ทำ</span>
       )}
       {checked && (
-        <span className="absolute right-1.5 text-[10px] font-medium text-white">ทำ</span>
+        <span className="absolute right-1 text-[10px] font-bold text-white">ทำ</span>
       )}
     </button>
   );
