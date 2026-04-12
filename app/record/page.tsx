@@ -30,6 +30,7 @@ interface Activity {
   blood_sugar?: number;
   sweet_type?: string[];
   exercise_minutes?: number;
+  exercise_type?: string;
   target_minutes?: number;
 }
 
@@ -75,57 +76,29 @@ export default function RecordPage() {
     try {
       const [profileData, activitiesData, recordsData] = await Promise.all([
         getProfile(userData.id),
-        getActivities(userData.pam_level || 'L2'), // ใช้ userData.pam_level ชั่วคราว
+        getActivities(userData.pam_level || 'L2'),
         getTodayRecords(userData.id)
       ]);
       
       setProfile(profileData);
       
-      // ✅ ใช้ profileData.pam_level แทน (ค่าจริงจากฐานข้อมูล)
-      const actualPamLevel = profileData?.pam_level || userData.pam_level || 'L2';
-      
-      console.log('📊 User PAM Level from session:', userData.pam_level);
-      console.log('📊 Actual PAM Level from database:', actualPamLevel);
-      
-      // ✅ ถ้า pam_level ไม่ตรงกัน ให้โหลด activities ใหม่
-      if (actualPamLevel !== userData.pam_level) {
-        console.log('⚠️ PAM Level mismatch! Reloading activities...');
-        const correctActivities = await getActivities(actualPamLevel);
-        
-        const activitiesWithRecords = correctActivities.map((activity: any) => {
-          const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
-          return {
-            ...activity,
-            is_completed: existingRecord?.is_completed ?? false,
-            record_id: existingRecord?.id,
-            weight: existingRecord?.weight,
-            blood_sugar: existingRecord?.blood_sugar,
-            sweet_type: existingRecord?.sweet_type ?? [],
-            exercise_minutes: existingRecord?.exercise_minutes,
-            target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
-          };
-        });
-        
-        setActivities(activitiesWithRecords);
-      } else {
-        // ใช้ข้อมูลเดิม
-        const activitiesWithRecords = activitiesData.map((activity: any) => {
-          const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
-          return {
-            ...activity,
-            is_completed: existingRecord?.is_completed ?? false,
-            record_id: existingRecord?.id,
-            weight: existingRecord?.weight,
-            blood_sugar: existingRecord?.blood_sugar,
-            sweet_type: existingRecord?.sweet_type ?? [],
-            exercise_minutes: existingRecord?.exercise_minutes,
-            target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
-          };
-        });
-        
-        setActivities(activitiesWithRecords);
-      }
-      
+      const activitiesWithRecords = activitiesData.map((activity: any) => {
+        const existingRecord = recordsData.find((r: any) => r.activity_id === activity.id);
+        return {
+          ...activity,
+          is_completed: existingRecord?.is_completed ?? false,
+          record_id: existingRecord?.id,
+          weight: existingRecord?.weight,
+          blood_sugar: existingRecord?.blood_sugar,
+          sweet_type: existingRecord?.sweet_type ?? [],
+          exercise_minutes: existingRecord?.exercise_minutes,
+          exercise_type: existingRecord?.exercise_type,
+          target_minutes: activity.activity_type === 'exercise' ? (activity.target_value || 30) : undefined,
+        };
+      });
+
+      setActivities(activitiesWithRecords);
+
       // โหลดหมายเหตุรายวัน
       const noteData = await getDailyNote(userData.id);
       if (noteData?.note_text) {
@@ -139,20 +112,18 @@ export default function RecordPage() {
   };
 
   const toggleActivity = async (id: string) => {
-    if (!user) return;
-    
     setActivities((prev) =>
       prev.map((a) => {
         if (a.id === id) {
           const newCompleted = !a.is_completed;
           
-          // น้ำหนักและน้ำตาล
+          // ✅ น้ำหนักและน้ำตาล
           if (a.activity_code === 'record_weight_sugar' && newCompleted) {
             setShowWeightForm(true);
             return { ...a, is_completed: false };
           }
           
-          // ความหวาน
+          // ✅ ความหวาน
           if (a.activity_code === 'stop_sweet') {
             if (!newCompleted) {
               setShowSweetForm(true);
@@ -170,16 +141,17 @@ export default function RecordPage() {
             }
           }
           
-          // ออกกำลังกาย - เปิดฟอร์ม
+          // ✅ ออกกำลังกาย - เปิด Modal พร้อมค่าเดิม
           if (a.activity_type === 'exercise' && newCompleted) {
             setCurrentExerciseActivity(a);
-            setSelectedExerciseType('');
-            setExerciseMinutes(a.exercise_minutes?.toString() || '');
+            // ✅ ดึงค่าเดิมที่เคยบันทึกไว้ (ถ้ามี)
+            setSelectedExerciseType(a.exercise_type || '');
+            setExerciseMinutes(a.exercise_minutes?.toString() || a.target_minutes?.toString() || '30');
             setShowExerciseForm(true);
             return { ...a, is_completed: false };
           }
           
-          // กิจกรรมทั่วไป
+          // ✅ กิจกรรมทั่วไป
           if (user && newCompleted) {
             saveRecord({
               user_id: user.id,
@@ -259,7 +231,7 @@ export default function RecordPage() {
   };
 
   const handleSaveExercise = async () => {
-    if (!selectedExerciseType || !exerciseMinutes || !user || !currentExerciseActivity) return;
+    if (!exerciseMinutes || !user || !currentExerciseActivity) return;
     
     await saveRecord({
       user_id: user.id,
@@ -267,6 +239,7 @@ export default function RecordPage() {
       record_date: new Date().toISOString().split('T')[0],
       is_completed: true,
       exercise_minutes: parseInt(exerciseMinutes),
+      exercise_type: selectedExerciseType || 'walking',
     });
 
     setActivities((prev) =>
@@ -276,7 +249,7 @@ export default function RecordPage() {
               ...a, 
               is_completed: true, 
               exercise_minutes: parseInt(exerciseMinutes),
-              exercise_type: selectedExerciseType,
+              exercise_type: selectedExerciseType || 'walking',
             }
           : a
       )
@@ -322,17 +295,6 @@ export default function RecordPage() {
   const measurementActivities = activities.filter((a) => a.activity_type === 'measurement');
   const sleepActivities = activities.filter((a) => a.activity_type === 'rest');
 
-  // ✅ ฟังก์ชันแสดงชื่อระดับ
-  const getPamLevelName = (level: string) => {
-    switch(level) {
-      case 'L1': return 'Deny';
-      case 'L2': return 'General';
-      case 'L3': return 'Intensive';
-      case 'L4': return 'Champion';
-      default: return level;
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -341,34 +303,18 @@ export default function RecordPage() {
     );
   }
 
-  const actualPamLevel = profile?.pam_level || user?.pam_level || 'L2';
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-sky-100 to-cyan-50 pb-20">
       <StarBackground />
 
-      {/* Header */}
       <div className="relative z-10 max-w-md mx-auto px-4 py-6">
+        
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-800">
-              กิจกรรมสำหรับนักกีฬา {getPamLevelName(actualPamLevel)}
+              กิจกรรมสำหรับนักกีฬา {profile?.pam_level === 'L4' ? 'Champion' : profile?.pam_level || 'L2'}
             </h1>
-            {/* ✅ แสดง PAM Level และ Zone */}
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">
-                {actualPamLevel}
-              </span>
-              {profile?.zone && (
-                <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                  profile.zone === 'Green Zone' ? 'bg-green-100 text-green-700' :
-                  profile.zone === 'Yellow Zone' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  {profile.zone}
-                </span>
-              )}
-            </div>
             <p className="text-xs text-gray-500 mt-1">
               {new Date().toLocaleDateString('th-TH', {
                 weekday: 'long',
@@ -600,10 +546,10 @@ export default function RecordPage() {
         </div>
       )}
 
-      {/* Exercise Form Modal */}
+      {/* ✅ Exercise Form Modal - แก้ไขใหม่ */}
       {showExerciseForm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
             <h2 className="text-lg font-bold text-gray-800 mb-2">🏃 บันทึกการออกกำลังกาย</h2>
             
             {/* แสดงเป้าหมาย */}
@@ -645,9 +591,11 @@ export default function RecordPage() {
                 </div>
               </div>
 
-              {/* เวลาออกกำลังกาย */}
+              {/* เวลาออกกำลังกาย - ✅ แสดงค่าเดิม */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">⏱️ เวลาออกกำลังกาย (นาที)</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  ⏱️ เวลาออกกำลังกาย (นาที)
+                </label>
                 <input
                   type="number"
                   value={exerciseMinutes}
@@ -673,6 +621,7 @@ export default function RecordPage() {
               </div>
             </div>
 
+            {/* ปุ่มควบคุม */}
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => {
@@ -687,7 +636,7 @@ export default function RecordPage() {
               </button>
               <button
                 onClick={handleSaveExercise}
-                disabled={!selectedExerciseType || !exerciseMinutes}
+                disabled={!exerciseMinutes}
                 className="flex-1 py-3 bg-gradient-to-r from-blue-500 to-cyan-600 text-white font-bold rounded-xl hover:from-blue-600 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 บันทึก
@@ -728,15 +677,11 @@ function ActivitySection({
 }) {
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-white/50 overflow-hidden">
-      {/* Header */}
       <div className={`flex items-center gap-2 px-4 py-3 ${headerBg}`}>
-        <span className="text-xl" role="img" aria-label={title}>
-          {icon}
-        </span>
+        <span className="text-xl" role="img" aria-label={title}>{icon}</span>
         <h2 className="text-base font-bold text-gray-800">{title}</h2>
       </div>
 
-      {/* Activities */}
       <div className="p-4 space-y-2">
         {activities.map((activity) => (
           <div key={activity.id} className="flex items-center justify-between px-4 py-4 border-b border-gray-100 last:border-b-0">
@@ -751,14 +696,12 @@ function ActivitySection({
                     <p className="text-xs text-gray-500 mt-0.5">{activity.description_th}</p>
                   )}
                   
-                  {/* แสดงเป้าหมายนาทีออกกำลังกาย */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.target_minutes && (
                     <p className="text-xs text-blue-600 mt-1 font-medium">
                       🎯 เป้าหมาย: {activity.target_minutes} นาที/วัน
                     </p>
                   )}
                   
-                  {/* แสดงข้อมูลที่บันทึกแล้ว */}
                   {showExerciseInfo && activity.activity_type === 'exercise' && activity.is_completed && activity.exercise_minutes && (
                     <div className="mt-2 space-y-1">
                       <p className="text-xs text-green-600 font-medium">
@@ -774,7 +717,6 @@ function ActivitySection({
                     </div>
                   )}
                   
-                  {/* ความหวาน */}
                   {showSweetType && activity.activity_code === 'stop_sweet' && !activity.is_completed && (
                     <button
                       onClick={() => onOpenSweetForm?.(activity)}
@@ -796,7 +738,6 @@ function ActivitySection({
                     </div>
                   )}
                   
-                  {/* น้ำหนักและน้ำตาล */}
                   {showValue && activity.activity_code === 'record_weight_sugar' && (
                     <button
                       onClick={() => onOpenWeightForm?.(activity)}
