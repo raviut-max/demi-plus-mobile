@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { checkSession, getProfile, getNextAppointment } from '@/lib/supabase/queries';
+import { checkSession, getProfile, getNextAppointment, getRandomMotivationalMessage } from '@/lib/supabase/queries';
 import { StarBackground } from '@/components/star-background';
 import Image from 'next/image';
 import { Calendar, TrendingUp, Target, BookOpen } from 'lucide-react';
@@ -12,6 +12,7 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [appointment, setAppointment] = useState<any>(null);
+  const [motivationalMessage, setMotivationalMessage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -47,7 +48,7 @@ export default function HomePage() {
     console.log('🔄 [HomePage] Starting data fetch...');
     
     try {
-      // ✅ ขั้นตอนที่ 1: โหลด Profile จากฐานข้อมูล
+      // ✅ ขั้นตอนที่ 1: โหลด Profile
       console.log('📦 [HomePage] Step 1: Loading profile...');
       const profileData = await getProfile(userData.id);
       console.log('✅ [HomePage] Profile loaded:', profileData);
@@ -56,7 +57,7 @@ export default function HomePage() {
       if (!profileData) {
         console.error('❌ [HomePage] No profile data found!');
       } else {
-        console.log('✅ [HomePage] Profile data:', {
+        console.log('✅ [HomePage] Profile ', {
           id: profileData.id,
           full_name: profileData.full_name,
           first_name: profileData.first_name,
@@ -74,9 +75,23 @@ export default function HomePage() {
       console.log('✅ [HomePage] Appointment:', appointmentData ? 'Found' : 'Not found');
       setAppointment(appointmentData);
       
+      // ✅ ขั้นตอนที่ 3: โหลดข้อความสุ่ม
+      console.log('📦 [HomePage] Step 3: Loading motivational message...');
+      const pamLevel = profileData?.pam_level || userData.pam_level || 'L2';
+      console.log('🎯 [HomePage] PAM Level for message:', pamLevel);
+      
+      const messageData = await getRandomMotivationalMessage(pamLevel, userData.id);
+      console.log('✅ [HomePage] Motivational message:', messageData ? 'Found' : 'Not found');
+      
+      if (messageData) {
+        console.log('💬 [HomePage] Message text:', messageData.message_text);
+      }
+      
+      setMotivationalMessage(messageData);
+      
       console.log('🎉 [HomePage] All data loaded successfully!');
     } catch (error) {
-      console.error('❌ [HomePage] Error fetching data:', error);
+      console.error('❌ [HomePage] Error fetching ', error);
     } finally {
       setLoading(false);
       console.log('✅ [HomePage] Loading complete');
@@ -95,10 +110,10 @@ export default function HomePage() {
     );
   }
 
-  console.log('🎨 [HomePage] Rendering with data:', {
+  console.log('🎨 [HomePage] Rendering with ', {
     profile: profile?.full_name || profile?.first_name,
     pam_level: profile?.pam_level,
-    zone: profile?.zone
+    has_message: !!motivationalMessage
   });
 
   // =====================================================
@@ -203,7 +218,7 @@ export default function HomePage() {
     <div className="max-w-md mx-auto px-4 py-6">
       
       {/* =====================================================
-          Header - แสดงชื่อผู้ป่วยและ PAM Level
+          Header - แสดงชื่อผู้ป่วย PAM Level และ Zone
           ===================================================== */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
@@ -217,10 +232,15 @@ export default function HomePage() {
           </span>
         </div>
         
-        {/* ✅ แสดง PAM Level และ Step */}
-        <p className="text-sm text-gray-600">
-          นักกีฬาเบาหวาน {getPamLevelName(profile?.pam_level || 'L2')} | {profile?.current_step || 'Starter'}
-        </p>
+        {/* ✅ แสดง PAM Level และ Step ชัดเจน */}
+        <div className="flex items-center gap-2 mt-1">
+          <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-700 font-semibold">
+            {profile?.pam_level || 'L2'}
+          </span>
+          <p className="text-sm text-gray-600">
+            นักกีฬาเบาหวาน {getPamLevelName(profile?.pam_level || 'L2')} | {profile?.current_step || 'Starter'}
+          </p>
+        </div>
         
         <p className="text-sm text-gray-500 mt-1">สุขภาพดี ควบคุมได้นั้น!</p>
       </div>
@@ -287,20 +307,47 @@ export default function HomePage() {
       )}
 
       {/* =====================================================
-          Motivation Message - ข้อความสุ่มกระตุ้น
+          ✅ Motivation Message - ข้อความสุ่มกระตุ้น (ใหม่)
           ===================================================== */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-            <span className="text-xl">✨</span>
-          </div>
-          <div className="flex-1">
-            <p className="text-sm text-gray-700">
-              คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
-            </p>
+      {motivationalMessage ? (
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+              <span className="text-xl">✨</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700">
+                {motivationalMessage.message_text}
+              </p>
+              {motivationalMessage.category && (
+                <p className="text-xs text-gray-500 mt-1">
+                  📋 หมวด: {
+                    motivationalMessage.category === 'food' ? 'อาหาร' :
+                    motivationalMessage.category === 'exercise' ? 'ออกกำลังกาย' :
+                    motivationalMessage.category === 'health' ? 'สุขภาพ' : 'ทั่วไป'
+                  }
+                </p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+              <span className="text-xl">✨</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-gray-700">
+                คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                ⚠️ ข้อความเริ่มต้น (ยังไม่มีข้อมูลในฐานข้อมูล)
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           Footer - โลโก้
