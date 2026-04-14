@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { checkSession, getProfile, getNextAppointment, getRandomMotivationalMessage } from '@/lib/supabase/queries';
 import { StarBackground } from '@/components/star-background';
 import Image from 'next/image';
-import { Calendar, TrendingUp, Target, BookOpen, MessageCircle } from 'lucide-react';
+import { Calendar, TrendingUp, Target, BookOpen } from 'lucide-react';
 
 export default function HomePage() {
   const [user, setUser] = useState<any>(null);
@@ -16,9 +16,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // =====================================================
-  // 🔍 DEBUG: useEffect - เริ่มต้นระบบ
-  // =====================================================
   useEffect(() => {
     console.log('🏠 [HomePage] Component mounted');
     
@@ -41,39 +38,48 @@ export default function HomePage() {
     fetchData(userData);
   }, [router]);
 
-  // =====================================================
-  // 🔍 DEBUG: fetchData - โหลดข้อมูลทั้งหมด
-  // =====================================================
   const fetchData = async (userData: any) => {
     console.log('🔄 [HomePage] Starting data fetch...');
     
     try {
+      // ✅ ขั้นตอนที่ 1: โหลด Profile
       console.log('📦 [HomePage] Step 1: Loading profile...');
       const profileData = await getProfile(userData.id);
-      console.log('✅ [HomePage] Profile loaded:', {
-        id: profileData?.id,
-        full_name: profileData?.full_name,
-        pam_level: profileData?.pam_level,
-        zone: profileData?.zone
-      });
+      console.log('✅ [HomePage] Profile loaded:', profileData);
       
+      // ✅ ตรวจสอบว่าได้ข้อมูลหรือไม่
+      if (!profileData) {
+        console.error('❌ [HomePage] No profile data found!');
+      } else {
+        console.log('✅ [HomePage] Profile data:', {
+          id: profileData.id,
+          full_name: profileData.full_name,
+          pam_level: profileData.pam_level,
+          zone: profileData.zone
+        });
+      }
+      
+      // ✅ ตั้งค่า profile state
+      setProfile(profileData);
+      
+      // ✅ ขั้นตอนที่ 2: โหลดนัดหมาย
       console.log('📦 [HomePage] Step 2: Loading appointment...');
       const appointmentData = await getNextAppointment(userData.id);
       console.log('✅ [HomePage] Appointment:', appointmentData ? 'Found' : 'Not found');
+      setAppointment(appointmentData);
       
+      // ✅ ขั้นตอนที่ 3: โหลดข้อความสุ่ม
       console.log('📦 [HomePage] Step 3: Loading motivational message...');
-      console.log('🎯 [HomePage] PAM Level for message:', profileData?.pam_level || 'L2');
-      const messageData = await getRandomMotivationalMessage(
-        profileData?.pam_level || 'L2',
-        userData.id
-      );
+      const pamLevel = profileData?.pam_level || userData.pam_level || 'L2';
+      console.log('🎯 [HomePage] PAM Level for message:', pamLevel);
+      
+      const messageData = await getRandomMotivationalMessage(pamLevel, userData.id);
       console.log('✅ [HomePage] Motivational message:', messageData ? 'Found' : 'Not found');
+      
       if (messageData) {
         console.log('💬 [HomePage] Message text:', messageData.message_text);
       }
       
-      setProfile(profileData);
-      setAppointment(appointmentData);
       setMotivationalMessage(messageData);
       
       console.log('🎉 [HomePage] All data loaded successfully!');
@@ -85,9 +91,6 @@ export default function HomePage() {
     }
   };
 
-  // =====================================================
-  // 🔄 แสดงหน้าโหลด
-  // =====================================================
   if (loading) {
     console.log('⏳ [HomePage] Showing loading state');
     return (
@@ -97,9 +100,6 @@ export default function HomePage() {
     );
   }
 
-  // =====================================================
-  // 🎨 แสดงหน้าหลัก
-  // =====================================================
   console.log('🎨 [HomePage] Rendering with data:', {
     profile: profile?.full_name,
     pam_level: profile?.pam_level,
@@ -169,7 +169,7 @@ export default function HomePage() {
         <div className="flex items-center gap-2 mb-2">
           {/* ✅ แสดงชื่อผู้ป่วยจริง */}
           <h1 className="text-xl font-bold text-gray-800">
-            {profile?.full_name || 'ผู้ใช้'}
+            {profile?.full_name || user?.full_name_th || 'ผู้ใช้'}
           </h1>
           {/* ✅ แสดง Zone */}
           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getZoneColor(profile?.zone || 'Green Zone')}`}>
@@ -247,7 +247,7 @@ export default function HomePage() {
       )}
 
       {/* =====================================================
-          ✅ Motivation Message - ข้อความสุ่มกระตุ้น (แก้ไขแล้ว)
+          ✅ Motivation Message - ข้อความสุ่มกระตุ้น
           ===================================================== */}
       {motivationalMessage ? (
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
@@ -282,7 +282,7 @@ export default function HomePage() {
                 คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                ⚠️ ข้อความเริ่มต้น (ยังไม่มีข้อมูล)
+                ⚠️ ข้อความเริ่มต้น (ยังไม่มีข้อมูลในฐานข้อมูล)
               </p>
             </div>
           </div>
