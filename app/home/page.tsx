@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { checkSession, getProfile, getNextAppointment, getRandomMotivationalMessage } from '@/lib/supabase/queries';
+import { checkSession, getProfile, getNextAppointment } from '@/lib/supabase/queries';
 import { StarBackground } from '@/components/star-background';
 import Image from 'next/image';
 import { Calendar, TrendingUp, Target, BookOpen } from 'lucide-react';
@@ -12,10 +12,12 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [appointment, setAppointment] = useState<any>(null);
-  const [motivationalMessage, setMotivationalMessage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  // =====================================================
+  // 🔍 DEBUG: useEffect - เริ่มต้นระบบ
+  // =====================================================
   useEffect(() => {
     console.log('🏠 [HomePage] Component mounted');
     
@@ -28,7 +30,7 @@ export default function HomePage() {
       return;
     }
     
-    console.log('📋 [HomePage] User data:', {
+    console.log('📋 [HomePage] User from localStorage:', {
       id: userData.id,
       pam_level: userData.pam_level,
       full_name: userData.full_name_th
@@ -38,11 +40,14 @@ export default function HomePage() {
     fetchData(userData);
   }, [router]);
 
+  // =====================================================
+  // 🔍 DEBUG: fetchData - โหลดข้อมูลทั้งหมด
+  // =====================================================
   const fetchData = async (userData: any) => {
     console.log('🔄 [HomePage] Starting data fetch...');
     
     try {
-      // ✅ ขั้นตอนที่ 1: โหลด Profile
+      // ✅ ขั้นตอนที่ 1: โหลด Profile จากฐานข้อมูล
       console.log('📦 [HomePage] Step 1: Loading profile...');
       const profileData = await getProfile(userData.id);
       console.log('✅ [HomePage] Profile loaded:', profileData);
@@ -54,12 +59,13 @@ export default function HomePage() {
         console.log('✅ [HomePage] Profile data:', {
           id: profileData.id,
           full_name: profileData.full_name,
+          first_name: profileData.first_name,
+          last_name: profileData.last_name,
           pam_level: profileData.pam_level,
           zone: profileData.zone
         });
       }
       
-      // ✅ ตั้งค่า profile state
       setProfile(profileData);
       
       // ✅ ขั้นตอนที่ 2: โหลดนัดหมาย
@@ -67,20 +73,6 @@ export default function HomePage() {
       const appointmentData = await getNextAppointment(userData.id);
       console.log('✅ [HomePage] Appointment:', appointmentData ? 'Found' : 'Not found');
       setAppointment(appointmentData);
-      
-      // ✅ ขั้นตอนที่ 3: โหลดข้อความสุ่ม
-      console.log('📦 [HomePage] Step 3: Loading motivational message...');
-      const pamLevel = profileData?.pam_level || userData.pam_level || 'L2';
-      console.log('🎯 [HomePage] PAM Level for message:', pamLevel);
-      
-      const messageData = await getRandomMotivationalMessage(pamLevel, userData.id);
-      console.log('✅ [HomePage] Motivational message:', messageData ? 'Found' : 'Not found');
-      
-      if (messageData) {
-        console.log('💬 [HomePage] Message text:', messageData.message_text);
-      }
-      
-      setMotivationalMessage(messageData);
       
       console.log('🎉 [HomePage] All data loaded successfully!');
     } catch (error) {
@@ -91,6 +83,9 @@ export default function HomePage() {
     }
   };
 
+  // =====================================================
+  // 🔄 แสดงหน้าโหลด
+  // =====================================================
   if (loading) {
     console.log('⏳ [HomePage] Showing loading state');
     return (
@@ -101,10 +96,74 @@ export default function HomePage() {
   }
 
   console.log('🎨 [HomePage] Rendering with data:', {
-    profile: profile?.full_name,
+    profile: profile?.full_name || profile?.first_name,
     pam_level: profile?.pam_level,
-    has_message: !!motivationalMessage
+    zone: profile?.zone
   });
+
+  // =====================================================
+  // 🎨 Helper Functions
+  // =====================================================
+  
+  // ✅ ฟังก์ชันแสดงชื่อผู้ป่วย (รองรับหลายกรณี)
+  const getPatientName = () => {
+    if (profile?.full_name) {
+      return profile.full_name;
+    }
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    if (profile?.first_name) {
+      return profile.first_name;
+    }
+    return user?.full_name_th || 'ผู้ใช้';
+  };
+
+  // ✅ ฟังก์ชันแสดงชื่อ PAM Level
+  const getPamLevelName = (level: string) => {
+    switch (level) {
+      case 'L4': return 'Champion';
+      case 'L3': return 'Intensive';
+      case 'L2': return 'General';
+      default: return 'General';
+    }
+  };
+
+  // ✅ ฟังก์ชันแสดงสี Zone
+  const getZoneColor = (zone: string) => {
+    const zoneLower = zone?.toLowerCase() || 'green';
+    switch (zoneLower) {
+      case 'green zone':
+      case 'green':
+        return 'bg-green-100 text-green-700';
+      case 'yellow zone':
+      case 'yellow':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'red zone':
+      case 'red':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-green-100 text-green-700';
+    }
+  };
+
+  // ✅ ฟังก์ชันแสดงชื่อ Zone
+  const getZoneText = (zone: string) => {
+    const zoneLower = zone?.toLowerCase() || 'green';
+    switch (zoneLower) {
+      case 'green zone':
+      case 'green':
+        return 'Green Zone';
+      case 'yellow zone':
+      case 'yellow':
+        return 'Yellow Zone';
+      case 'red zone':
+      case 'red':
+        return 'Red Zone';
+      default:
+        return 'Green Zone';
+    }
+  };
 
   const menuItems = [
     {
@@ -137,28 +196,9 @@ export default function HomePage() {
     },
   ];
 
-  const getZoneColor = (zone: string) => {
-    switch (zone) {
-      case 'Green Zone':
-        return 'bg-green-100 text-green-700';
-      case 'Yellow Zone':
-        return 'bg-yellow-100 text-yellow-700';
-      case 'Red Zone':
-        return 'bg-red-100 text-red-700';
-      default:
-        return 'bg-green-100 text-green-700';
-    }
-  };
-
-  const getPamLevelName = (level: string) => {
-    switch (level) {
-      case 'L4': return 'Champion';
-      case 'L3': return 'Intensive';
-      case 'L2': return 'General';
-      default: return 'General';
-    }
-  };
-
+  // =====================================================
+  // 🎨 แสดงหน้าหลัก
+  // =====================================================
   return (
     <div className="max-w-md mx-auto px-4 py-6">
       
@@ -169,11 +209,11 @@ export default function HomePage() {
         <div className="flex items-center gap-2 mb-2">
           {/* ✅ แสดงชื่อผู้ป่วยจริง */}
           <h1 className="text-xl font-bold text-gray-800">
-            {profile?.full_name || user?.full_name_th || 'ผู้ใช้'}
+            {getPatientName()}
           </h1>
           {/* ✅ แสดง Zone */}
           <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getZoneColor(profile?.zone || 'Green Zone')}`}>
-            {profile?.zone || 'Green Zone'}
+            {getZoneText(profile?.zone || 'Green Zone')}
           </span>
         </div>
         
@@ -247,47 +287,20 @@ export default function HomePage() {
       )}
 
       {/* =====================================================
-          ✅ Motivation Message - ข้อความสุ่มกระตุ้น
+          Motivation Message - ข้อความสุ่มกระตุ้น
           ===================================================== */}
-      {motivationalMessage ? (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-              <span className="text-xl">✨</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-gray-700">
-                {motivationalMessage.message_text}
-              </p>
-              {motivationalMessage.category && (
-                <p className="text-xs text-gray-500 mt-1">
-                  📋 หมวด: {
-                    motivationalMessage.category === 'food' ? 'อาหาร' :
-                    motivationalMessage.category === 'exercise' ? 'ออกกำลังกาย' :
-                    motivationalMessage.category === 'health' ? 'สุขภาพ' : 'ทั่วไป'
-                  }
-                </p>
-              )}
-            </div>
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
+            <span className="text-xl">✨</span>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm text-gray-700">
+              คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
+            </p>
           </div>
         </div>
-      ) : (
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-yellow-100 rounded-full flex items-center justify-center">
-              <span className="text-xl">✨</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-gray-700">
-                คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                ⚠️ ข้อความเริ่มต้น (ยังไม่มีข้อมูลในฐานข้อมูล)
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* =====================================================
           Footer - โลโก้
