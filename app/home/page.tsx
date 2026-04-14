@@ -15,7 +15,7 @@ const menuItems = [
   {
     icon: <Calendar className="w-8 h-8 text-yellow-600" />,
     title: 'บันทึกรายวัน',
-    subtitle: 'ทำตามกฎทอง',
+    subtitle: 'ทำตามกฎทอง 5 ข้อ',
     color: 'bg-yellow-50',
     link: '/record',
   },

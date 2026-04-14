@@ -603,3 +603,142 @@ export async function getDailyNote(userId: string, noteDate?: string) {
     return null;
   }
 }
+
+// =====================================================
+// Motivational Messages - ข้อความกระตุ้นกำลังใจ
+// =====================================================
+
+// ✅ ฟังก์ชันดึงข้อความสุ่มตาม PAM Level
+export async function getRandomMotivationalMessage(
+  pamLevel: string = 'ALL',
+  userId?: string
+) {
+  try {
+    console.log('💬 [getRandomMotivationalMessage] Fetching for PAM Level:', pamLevel);
+    
+    // ✅ ดึงข้อความที่ active และตรงกับ PAM Level (หรือ ALL)
+    const { data, error } = await supabase
+      .from('motivational_messages')
+      .select('*')
+      .eq('is_active', true)
+      .in('pam_level', [pamLevel, 'ALL'])
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('❌ [getRandomMotivationalMessage] Error:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('⚠️ [getRandomMotivationalMessage] No messages found');
+      return null;
+    }
+
+    // ✅ สุ่มเลือก 1 ข้อความ
+    const randomIndex = Math.floor(Math.random() * data.length);
+    const selectedMessage = data[randomIndex];
+
+    console.log('✅ [getRandomMotivationalMessage] Selected:', selectedMessage.message_text.substring(0, 50) + '...');
+
+    return selectedMessage;
+  } catch (err) {
+    console.error('❌ [getRandomMotivationalMessage] Error:', err);
+    return null;
+  }
+}
+
+// ✅ ฟังก์ชันดึงข้อความตามหมวดหมู่
+export async function getMotivationalMessagesByCategory(
+  category: string,
+  pamLevel: string = 'ALL'
+) {
+  try {
+    const { data, error } = await supabase
+      .from('motivational_messages')
+      .select('*')
+      .eq('is_active', true)
+      .eq('category', category)
+      .in('pam_level', [pamLevel, 'ALL'])
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching messages by category:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error:', err);
+    return [];
+  }
+}
+
+// ✅ ฟังก์ชันบันทึกข้อความที่แสดง (เพื่อไม่ให้ซ้ำ)
+export async function saveDisplayedMessage(data: {
+  user_id: string;
+  message_id: string;
+  displayed_date: string;
+}) {
+  try {
+    const { data: result, error } = await supabase
+      .from('message_display_log')
+      .insert({
+        user_id: data.user_id,
+        message_id: data.message_id,
+        displayed_date: data.displayed_date,
+      });
+
+    if (error) {
+      console.error('Error saving displayed message:', error);
+      return null;
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Error:', err);
+    return null;
+  }
+}
+
+// =====================================================
+// Motivational Messages - ข้อความกระตุ้นกำลังใจ
+// =====================================================
+
+// ✅ ฟังก์ชันดึงข้อความสุ่มตาม PAM Level
+export async function getRandomMotivationalMessage(
+  pamLevel: string = 'ALL',
+  userId?: string
+) {
+  try {
+    console.log('💬 [getRandomMotivationalMessage] Fetching for PAM Level:', pamLevel);
+    
+    // ✅ ดึงข้อความที่ active และตรงกับ PAM Level (หรือ ALL)
+    const { data, error } = await supabase
+      .from('motivational_messages')
+      .select('*')
+      .eq('is_active', true)
+      .in('pam_level', [pamLevel, 'ALL'])
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('❌ [getRandomMotivationalMessage] Error:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('⚠️ [getRandomMotivationalMessage] No messages found');
+      return null;
+    }
+
+    // ✅ สุ่มเลือก 1 ข้อความ
+    const randomIndex = Math.floor(Math.random() * data.length);
+    const selectedMessage = data[randomIndex];
+
+    console.log('✅ [getRandomMotivationalMessage] Selected:', selectedMessage.message_text.substring(0, 50) + '...');
+
+    return selectedMessage;
+  } catch (err) {
+    console.error('❌ [getRandomMotivationalMessage] Error:', err);
+    return null;
+  }
+}
