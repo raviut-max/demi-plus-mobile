@@ -609,28 +609,68 @@ export async function getDailyNote(userId: string, noteDate?: string) {
 // =====================================================
 
 // ✅ ฟังก์ชันดึงข้อความสุ่มตาม PAM Level
+// =====================================================
+// Motivational Messages - ข้อความกระตุ้นกำลังใจ
+// =====================================================
+
 export async function getRandomMotivationalMessage(
   pamLevel: string = 'ALL',
   userId?: string
 ) {
   try {
-    console.log('💬 [getRandomMotivationalMessage] Fetching for PAM Level:', pamLevel);
+    console.log('💬 [getRandomMotivationalMessage] START');
+    console.log('🎯 [getRandomMotivationalMessage] Input pamLevel:', pamLevel);
+    console.log('👤 [getRandomMotivationalMessage] userId:', userId);
     
-    // ✅ ดึงข้อความที่ active และตรงกับ PAM Level (หรือ ALL)
-    const { data, error } = await supabase
+    // ✅ Query ดึงข้อความที่ active และตรงกับ PAM Level (หรือ ALL)
+    const query = supabase
       .from('motivational_messages')
       .select('*')
-      .eq('is_active', true)
-      .in('pam_level', [pamLevel, 'ALL'])
-      .order('sort_order', { ascending: true });
+      .eq('is_active', true);
+    
+    console.log('📝 [getRandomMotivationalMessage] Query before pam_level filter:', query);
+    
+    // ✅ กรองตาม pam_level (L3 หรือ ALL)
+    query.in('pam_level', [pamLevel, 'ALL']);
+    
+    query.order('sort_order', { ascending: true });
+    
+    console.log('🚀 [getRandomMotivationalMessage] Executing query...');
+    
+    const { data, error } = await query;
+    
+    console.log('📊 [getRandomMotivationalMessage] Raw response:', {
+      data_count: data?.length,
+      error: error
+    });
 
     if (error) {
-      console.error('❌ [getRandomMotivationalMessage] Error:', error);
+      console.error('❌ [getRandomMotivationalMessage] Supabase error:', error);
+      console.error('❌ [getRandomMotivationalMessage] Error details:', {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      });
       return null;
     }
 
     if (!data || data.length === 0) {
-      console.warn('⚠️ [getRandomMotivationalMessage] No messages found');
+      console.warn('⚠️ [getRandomMotivationalMessage] No messages found in database');
+      console.warn('⚠️ [getRandomMotivationalMessage] Tried to fetch for pam_level:', pamLevel);
+      
+      // ✅ ทดสอบ query ใหม่โดยไม่กรอง pam_level
+      console.log(' [getRandomMotivationalMessage] Trying fallback query without pam_level filter...');
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('motivational_messages')
+        .select('*')
+        .eq('is_active', true)
+        .limit(5);
+      
+      console.log('📊 [getRandomMotivationalMessage] Fallback query result:', {
+        count: fallbackData?.length,
+        error: fallbackError
+      });
+      
       return null;
     }
 
@@ -638,11 +678,18 @@ export async function getRandomMotivationalMessage(
     const randomIndex = Math.floor(Math.random() * data.length);
     const selectedMessage = data[randomIndex];
 
-    console.log('✅ [getRandomMotivationalMessage] Selected:', selectedMessage.message_text.substring(0, 50) + '...');
+    console.log('✅ [getRandomMotivationalMessage] SUCCESS');
+    console.log('💬 [getRandomMotivationalMessage] Selected message:', {
+      id: selectedMessage.id,
+      text: selectedMessage.message_text.substring(0, 50) + '...',
+      category: selectedMessage.category,
+      pam_level: selectedMessage.pam_level
+    });
 
     return selectedMessage;
   } catch (err) {
-    console.error('❌ [getRandomMotivationalMessage] Error:', err);
+    console.error('❌ [getRandomMotivationalMessage] Unexpected error:', err);
+    console.error('❌ [getRandomMotivationalMessage] Error stack:', (err as Error).stack);
     return null;
   }
 }
