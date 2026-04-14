@@ -8,94 +8,88 @@ import { StarBackground } from '@/components/star-background';
 import Image from 'next/image';
 import { Calendar, TrendingUp, Target, BookOpen, MessageCircle } from 'lucide-react';
 
-// =====================================================
-// ข้อมูลเมนูหลัก
-// =====================================================
-const menuItems = [
-  {
-    icon: <Calendar className="w-8 h-8 text-yellow-600" />,
-    title: 'บันทึกรายวัน',
-    subtitle: 'ทำตามกฎทอง 5 ข้อ',
-    color: 'bg-yellow-50',
-    link: '/record',
-  },
-  {
-    icon: <TrendingUp className="w-8 h-8 text-blue-600" />,
-    title: 'ดูความคืบหน้า',
-    subtitle: 'ผลลัพธ์ 7 วันล่าสุด',
-    color: 'bg-blue-50',
-    link: '/progress',
-  },
-  {
-    icon: <Target className="w-8 h-8 text-green-600" />,
-    title: 'เป้าหมายของฉัน',
-    subtitle: 'สัปดาห์นี้ & ระยะยาว',
-    color: 'bg-green-50',
-    link: '/goals',
-  },
-  {
-    icon: <BookOpen className="w-8 h-8 text-purple-600" />,
-    title: 'ความรู้สำหรับนักกีฬา',
-    subtitle: 'เคล็ดลับง่ายๆ ทุกวัน',
-    color: 'bg-purple-50',
-    link: '/knowledge',
-  },
-];
-
 export default function HomePage() {
-  const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [appointment, setAppointment] = useState(null);
-  const [motivationalMessage, setMotivationalMessage] = useState(null);
+  const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [appointment, setAppointment] = useState<any>(null);
+  const [motivationalMessage, setMotivationalMessage] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   // =====================================================
-  // 🔍 โหลดข้อมูลเมื่อเปิดหน้า
+  // 🔍 DEBUG: useEffect - เริ่มต้นระบบ
   // =====================================================
   useEffect(() => {
+    console.log('🏠 [HomePage] Component mounted');
+    
     const userData = checkSession();
+    console.log('🔐 [HomePage] Session check:', userData ? 'Valid' : 'Invalid');
+    
     if (!userData) {
+      console.log('⚠️ [HomePage] No session, redirecting to login');
       router.push('/login');
       return;
     }
+    
+    console.log('📋 [HomePage] User data:', {
+      id: userData.id,
+      pam_level: userData.pam_level,
+      full_name: userData.full_name_th
+    });
+    
     setUser(userData);
     fetchData(userData);
   }, [router]);
 
   // =====================================================
-  // 📦 ฟังก์ชันโหลดข้อมูลทั้งหมด
+  // 🔍 DEBUG: fetchData - โหลดข้อมูลทั้งหมด
   // =====================================================
   const fetchData = async (userData: any) => {
+    console.log('🔄 [HomePage] Starting data fetch...');
+    
     try {
-      console.log('🏠 [HomePage] Fetching data for user:', userData.id);
+      console.log('📦 [HomePage] Step 1: Loading profile...');
+      const profileData = await getProfile(userData.id);
+      console.log('✅ [HomePage] Profile loaded:', {
+        id: profileData?.id,
+        full_name: profileData?.full_name,
+        pam_level: profileData?.pam_level,
+        zone: profileData?.zone
+      });
       
-      const [profileData, appointmentData, messageData] = await Promise.all([
-        getProfile(userData.id),
-        getNextAppointment(userData.id),
-        getRandomMotivationalMessage(userData.pam_level || 'L2')
-      ]);
+      console.log('📦 [HomePage] Step 2: Loading appointment...');
+      const appointmentData = await getNextAppointment(userData.id);
+      console.log('✅ [HomePage] Appointment:', appointmentData ? 'Found' : 'Not found');
+      
+      console.log('📦 [HomePage] Step 3: Loading motivational message...');
+      console.log('🎯 [HomePage] PAM Level for message:', profileData?.pam_level || 'L2');
+      const messageData = await getRandomMotivationalMessage(
+        profileData?.pam_level || 'L2',
+        userData.id
+      );
+      console.log('✅ [HomePage] Motivational message:', messageData ? 'Found' : 'Not found');
+      if (messageData) {
+        console.log('💬 [HomePage] Message text:', messageData.message_text);
+      }
       
       setProfile(profileData);
       setAppointment(appointmentData);
       setMotivationalMessage(messageData);
       
-      console.log('✅ [HomePage] Data loaded:', {
-        profile: profileData?.full_name,
-        appointment: appointmentData ? 'Has appointment' : 'No appointment',
-        message: messageData?.message_text?.substring(0, 50) + '...'
-      });
+      console.log('🎉 [HomePage] All data loaded successfully!');
     } catch (error) {
       console.error('❌ [HomePage] Error fetching data:', error);
     } finally {
       setLoading(false);
+      console.log('✅ [HomePage] Loading complete');
     }
   };
 
   // =====================================================
-  // 🎨 แสดงหน้าโหลด
+  // 🔄 แสดงหน้าโหลด
   // =====================================================
   if (loading) {
+    console.log('⏳ [HomePage] Showing loading state');
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
@@ -106,26 +100,88 @@ export default function HomePage() {
   // =====================================================
   // 🎨 แสดงหน้าหลัก
   // =====================================================
+  console.log('🎨 [HomePage] Rendering with data:', {
+    profile: profile?.full_name,
+    pam_level: profile?.pam_level,
+    has_message: !!motivationalMessage
+  });
+
+  const menuItems = [
+    {
+      icon: <Calendar className="w-8 h-8 text-yellow-600" />,
+      title: 'บันทึกรายวัน',
+      subtitle: 'ทำตามกฎทอง 5 ข้อ',
+      color: 'bg-yellow-50',
+      link: '/record',
+    },
+    {
+      icon: <TrendingUp className="w-8 h-8 text-blue-600" />,
+      title: 'ดูความคืบหน้า',
+      subtitle: 'ผลลัพธ์ 7 วันล่าสุด',
+      color: 'bg-blue-50',
+      link: '/progress',
+    },
+    {
+      icon: <Target className="w-8 h-8 text-green-600" />,
+      title: 'เป้าหมายของฉัน',
+      subtitle: 'สัปดาห์นี้ & ระยะยาว',
+      color: 'bg-green-50',
+      link: '/goals',
+    },
+    {
+      icon: <BookOpen className="w-8 h-8 text-purple-600" />,
+      title: 'ความรู้สำหรับนักกีฬา',
+      subtitle: 'เคล็ดลับง่ายๆ ทุกวัน',
+      color: 'bg-purple-50',
+      link: '/knowledge',
+    },
+  ];
+
+  const getZoneColor = (zone: string) => {
+    switch (zone) {
+      case 'Green Zone':
+        return 'bg-green-100 text-green-700';
+      case 'Yellow Zone':
+        return 'bg-yellow-100 text-yellow-700';
+      case 'Red Zone':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-green-100 text-green-700';
+    }
+  };
+
+  const getPamLevelName = (level: string) => {
+    switch (level) {
+      case 'L4': return 'Champion';
+      case 'L3': return 'Intensive';
+      case 'L2': return 'General';
+      default: return 'General';
+    }
+  };
+
   return (
     <div className="max-w-md mx-auto px-4 py-6">
       
       {/* =====================================================
-          Header - แสดงข้อมูลผู้ป่วย
+          Header - แสดงชื่อผู้ป่วยและ PAM Level
           ===================================================== */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
-          <h1 className="text-xl font-bold text-gray-800">{profile?.full_name || 'ผู้ใช้'}</h1>
-          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-            profile?.zone === 'Green Zone' ? 'bg-green-100 text-green-700' :
-            profile?.zone === 'Yellow Zone' ? 'bg-yellow-100 text-yellow-700' :
-            'bg-red-100 text-red-700'
-          }`}>
+          {/* ✅ แสดงชื่อผู้ป่วยจริง */}
+          <h1 className="text-xl font-bold text-gray-800">
+            {profile?.full_name || 'ผู้ใช้'}
+          </h1>
+          {/* ✅ แสดง Zone */}
+          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getZoneColor(profile?.zone || 'Green Zone')}`}>
             {profile?.zone || 'Green Zone'}
           </span>
         </div>
+        
+        {/* ✅ แสดง PAM Level และ Step */}
         <p className="text-sm text-gray-600">
-          นักกีฬาเบาหวาน {profile?.pam_level === 'L4' ? 'Champion' : profile?.pam_level || 'L2'} | {profile?.current_step || 'Starter'}
+          นักกีฬาเบาหวาน {getPamLevelName(profile?.pam_level || 'L2')} | {profile?.current_step || 'Starter'}
         </p>
+        
         <p className="text-sm text-gray-500 mt-1">สุขภาพดี ควบคุมได้นั้น!</p>
       </div>
 
@@ -191,7 +247,7 @@ export default function HomePage() {
       )}
 
       {/* =====================================================
-          ✅ Motivation Message - ข้อความสุ่มกระตุ้น (ใหม่)
+          ✅ Motivation Message - ข้อความสุ่มกระตุ้น (แก้ไขแล้ว)
           ===================================================== */}
       {motivationalMessage ? (
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50 mb-4">
@@ -205,9 +261,11 @@ export default function HomePage() {
               </p>
               {motivationalMessage.category && (
                 <p className="text-xs text-gray-500 mt-1">
-                  📋 หมวด: {motivationalMessage.category === 'food' ? 'อาหาร' : 
-                             motivationalMessage.category === 'exercise' ? 'ออกกำลังกาย' :
-                             motivationalMessage.category === 'health' ? 'สุขภาพ' : 'ทั่วไป'}
+                  📋 หมวด: {
+                    motivationalMessage.category === 'food' ? 'อาหาร' :
+                    motivationalMessage.category === 'exercise' ? 'ออกกำลังกาย' :
+                    motivationalMessage.category === 'health' ? 'สุขภาพ' : 'ทั่วไป'
+                  }
                 </p>
               )}
             </div>
@@ -222,6 +280,9 @@ export default function HomePage() {
             <div className="flex-1">
               <p className="text-sm text-gray-700">
                 คุณทำได้ดีมาก! วันนี้ลองเพิ่มผัก 1 จาน ได้ไหม?
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                ⚠️ ข้อความเริ่มต้น (ยังไม่มีข้อมูล)
               </p>
             </div>
           </div>
